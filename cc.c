@@ -44,6 +44,12 @@ int main(int argc, char **argv)
 	char *file_buf;
 	struct token *tokens;
 
+	/*
+	 * TODO: option controled output. Ideas:
+	 * -l: prints the tokens as they were recognized by the lexer
+	 * -t: prints the ast (could also print in dot format)
+	 *  default: assembly?
+	 */
 	if (argc != 2)
 		usage(*argv);
 
