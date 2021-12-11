@@ -35,32 +35,29 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <string.h>
+#include <stdnoreturn.h>
 
 static void inline _error_common_errno(const char *prefix, const char *fmt,
-			  va_list args, int errno_, int abort)
+			  va_list args, int errno_)
 {
 	fprintf(stderr, "%s: ", prefix);
 	vfprintf(stderr, fmt, args);
 	fprintf(stderr, ": %s\n", strerror(errno_));
-	if (abort)
-		exit(128);
 }
 
 static void inline _error_common(const char *prefix, const char *fmt,
-			  va_list args, int abort)
+			  va_list args)
 {
 	fprintf(stderr, "%s: ", prefix);
 	vfprintf(stderr, fmt, args);
 	fprintf(stderr, "\n");
-	if (abort)
-		exit(128);
 }
 
 static int error_errno(char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	_error_common_errno("error", fmt, args, errno, 0);
+	_error_common_errno("error", fmt, args, errno);
 	va_end(args);
 	return -1;
 }
@@ -69,25 +66,27 @@ static int error(char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	_error_common("error", fmt, args, 0);
+	_error_common("error", fmt, args);
 	va_end(args);
 	return -1;
 }
 
-static void die_errno(char *fmt, ...)
+static noreturn void die_errno(char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	_error_common_errno("error", fmt, args, errno, 1);
+	_error_common_errno("error", fmt, args, errno);
 	va_end(args);
+	exit(128);
 }
 
-static void die(char *fmt, ...)
+static noreturn void die(char *fmt, ...)
 {
 	va_list args;
 	va_start(args, fmt);
-	_error_common("fatal", fmt, args, 1);
+	_error_common("fatal", fmt, args);
 	va_end(args);
+	exit(128);
 }
 
 #endif
