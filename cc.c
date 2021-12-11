@@ -42,18 +42,17 @@ static char *read_file(const char *filename)
 int main(int argc, char **argv)
 {
 	char *file_buf;
-	size_t nr_tokens;
 	struct token *tokens;
 
 	if (argc != 2)
 		usage(*argv);
 
 	file_buf = read_file(argv[1]);
-	tokens = lex(file_buf, &nr_tokens);
+	tokens = lex(file_buf);
 	
-	for (size_t i = 0; i < nr_tokens; i++) {
-		print_token(&tokens[i]);
-		free_token(&tokens[i]);
+	for (struct token *tok = tokens; !end_token(tok); tok++) {
+		print_token(tok);
+		free_token(tok);
 	}
 
 	free(tokens);

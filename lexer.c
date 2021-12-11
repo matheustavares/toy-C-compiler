@@ -58,18 +58,17 @@ void free_token(struct token *t)
 }
 
 
-struct token *lex(const char *str, size_t *nr)
+struct token *lex(const char *str)
 {
 	struct token *tokens = NULL;
-	size_t alloc = 0;
-	*nr = 0;
+	size_t alloc = 0, nr = 0;
 
 #define add_token_with_value(t, v) \
 	do { \
-		ALLOC_GROW(tokens, *nr + 1, alloc); \
-		tokens[*nr].type = t; \
-		tokens[*nr].value = v; \
-		(*nr)++; \
+		ALLOC_GROW(tokens, nr + 1, alloc); \
+		tokens[nr].type = t; \
+		tokens[nr].value = v; \
+		nr++; \
 	} while (0)
 
 #define add_token(t) add_token_with_value(t, NULL)
@@ -99,6 +98,7 @@ struct token *lex(const char *str, size_t *nr)
 		} else if (skip_prefix(str, "return", &str) && !char_in(*str, ALPHA_NUM)) {
 			add_token(TT_RETURN_KW);
 			str--;
+		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
 		} else if (skip_chars(&str, ALPHA) && !char_in(*str, NUM)) {
 			add_token_with_value(TT_IDENTIFIER, strndup(start, str - start));
 			str--;
@@ -116,5 +116,7 @@ struct token *lex(const char *str, size_t *nr)
 
 		}
 	}
+	add_token(TT_NONE); /* sentinel */
+	REALLOC_ARRAY(tokens, nr); /* trim excess. */
 	return tokens;
 }

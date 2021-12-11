@@ -23,8 +23,10 @@ struct token {
 	void *value;
 };
 
-struct token *lex(const char *str, size_t *nr);
+struct token *lex(const char *str);
 void print_token(struct token *t);
 void free_token(struct token *t);
+
+#define end_token(tok) ((tok)->type == TT_NONE)
 
 #endif
