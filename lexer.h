@@ -25,6 +25,9 @@ struct token {
 
 struct token *lex(const char *str);
 void print_token(struct token *t);
+
+/* Note: returns a static non-thread-safe buffer. */
+const char *tt2str(enum token_type tt);
 void free_token(struct token *t);
 
 #define end_token(tok) ((tok)->type == TT_NONE)

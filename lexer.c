@@ -30,24 +30,35 @@ static int skip_chars(const char **str_p, const char *list)
 	return advanced;
 }
 
+const char *tt2str(enum token_type tt)
+{
+	switch(tt) {
+	case TT_NONE: return "[none]";
+
+	case TT_OPEN_BRACE: return "{";
+	case TT_CLOSE_BRACE: return "}";
+	case TT_OPEN_PAR: return "(";
+	case TT_CLOSE_PAR: return ")";
+	case TT_SEMICOLON: return ";";
+
+	case TT_INT_KW: return "<int> keyword";
+	case TT_RETURN_KW: return "<return> keyword";
+
+	case TT_IDENTIFIER: return "<identifier>";
+	case TT_INTEGER: return "<integer>";
+	default:
+		die("Unknown token type: %d\n", tt);
+	}
+}
+
 void print_token(struct token *t)
 {
+	const char *tt_str = tt2str(t->type);
 	switch(t->type) {
-	case TT_NONE: printf("T:None\n"); break;
-
-	case TT_OPEN_BRACE: printf("T:{\n"); break;
-	case TT_CLOSE_BRACE: printf("T:}\n"); break;
-	case TT_OPEN_PAR: printf("T:(\n"); break;
-	case TT_CLOSE_PAR: printf("T:)\n"); break;
-	case TT_SEMICOLON: printf("T:;\n"); break;
-
-	case TT_INT_KW: printf("T:int\n"); break;
-	case TT_RETURN_KW: printf("T:return\n"); break;
-
-	case TT_IDENTIFIER: printf("T:[identifier]:'%s'\n", (char *)t->value); break;
-	case TT_INTEGER: printf("T:[integer]:%d\n", *(int *)(t->value)); break;
+	case TT_IDENTIFIER: printf("%s '%s'\n", tt_str, (char *)t->value); break;
+	case TT_INTEGER: printf("%s '%d'\n", tt_str, *(int *)(t->value)); break;
 	default:
-		die("Unknown token type: %d\n", t->type);
+		printf("%s\n", tt_str);
 	}
 }
 
