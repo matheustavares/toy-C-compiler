@@ -2,20 +2,20 @@
 #define _LEXER_H
 
 enum token_type {
-	TT_NONE = 0,
+	TOK_NONE = 0,
 
-	TT_OPEN_BRACE,
-	TT_CLOSE_BRACE,
-	TT_OPEN_PAR,
-	TT_CLOSE_PAR,
-	TT_SEMICOLON,
+	TOK_OPEN_BRACE,
+	TOK_CLOSE_BRACE,
+	TOK_OPEN_PAR,
+	TOK_CLOSE_PAR,
+	TOK_SEMICOLON,
 
 	/* keywords */
-	TT_INT_KW,
-	TT_RETURN_KW,
+	TOK_INT_KW,
+	TOK_RETURN_KW,
 
-	TT_IDENTIFIER,
-	TT_INTEGER,
+	TOK_IDENTIFIER,
+	TOK_INTEGER,
 };
 
 struct token {
@@ -30,6 +30,6 @@ void print_token(struct token *t);
 const char *tt2str(enum token_type tt);
 void free_token(struct token *t);
 
-#define end_token(tok) ((tok)->type == TT_NONE)
+#define end_token(tok) ((tok)->type == TOK_NONE)
 
 #endif

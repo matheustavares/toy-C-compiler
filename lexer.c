@@ -33,19 +33,19 @@ static int skip_chars(const char **str_p, const char *list)
 const char *tt2str(enum token_type tt)
 {
 	switch(tt) {
-	case TT_NONE: return "[none]";
+	case TOK_NONE: return "[none]";
 
-	case TT_OPEN_BRACE: return "{";
-	case TT_CLOSE_BRACE: return "}";
-	case TT_OPEN_PAR: return "(";
-	case TT_CLOSE_PAR: return ")";
-	case TT_SEMICOLON: return ";";
+	case TOK_OPEN_BRACE: return "{";
+	case TOK_CLOSE_BRACE: return "}";
+	case TOK_OPEN_PAR: return "(";
+	case TOK_CLOSE_PAR: return ")";
+	case TOK_SEMICOLON: return ";";
 
-	case TT_INT_KW: return "<int> keyword";
-	case TT_RETURN_KW: return "<return> keyword";
+	case TOK_INT_KW: return "<int> keyword";
+	case TOK_RETURN_KW: return "<return> keyword";
 
-	case TT_IDENTIFIER: return "<identifier>";
-	case TT_INTEGER: return "<integer>";
+	case TOK_IDENTIFIER: return "<identifier>";
+	case TOK_INTEGER: return "<integer>";
 	default:
 		die("Unknown token type: %d\n", tt);
 	}
@@ -55,8 +55,8 @@ void print_token(struct token *t)
 {
 	const char *tt_str = tt2str(t->type);
 	switch(t->type) {
-	case TT_IDENTIFIER: printf("%s '%s'\n", tt_str, (char *)t->value); break;
-	case TT_INTEGER: printf("%s '%d'\n", tt_str, *(int *)(t->value)); break;
+	case TOK_IDENTIFIER: printf("%s '%s'\n", tt_str, (char *)t->value); break;
+	case TOK_INTEGER: printf("%s '%d'\n", tt_str, *(int *)(t->value)); break;
 	default:
 		printf("%s\n", tt_str);
 	}
@@ -64,7 +64,7 @@ void print_token(struct token *t)
 
 void free_token(struct token *t)
 {
-	t->type = TT_NONE;
+	t->type = TOK_NONE;
 	FREE_AND_NULL(t->value);
 }
 
@@ -93,30 +93,30 @@ struct token *lex(const char *str)
 		const char *start = str;
 
 		if (*str == '{') {
-			add_token(TT_OPEN_BRACE);
+			add_token(TOK_OPEN_BRACE);
 		} else if (*str == '}') {
-			add_token(TT_CLOSE_BRACE);
+			add_token(TOK_CLOSE_BRACE);
 		} else if (*str == '(') {
-			add_token(TT_OPEN_PAR);
+			add_token(TOK_OPEN_PAR);
 		} else if (*str == ')') {
-			add_token(TT_CLOSE_PAR);
+			add_token(TOK_CLOSE_PAR);
 		} else if (*str == ';') {
-			add_token(TT_SEMICOLON);
+			add_token(TOK_SEMICOLON);
 
 		} else if (skip_prefix(str, "int", &str) && !char_in(*str, ALPHA_NUM)) {
-			add_token(TT_INT_KW);
+			add_token(TOK_INT_KW);
 			str--;
 		} else if (skip_prefix(str, "return", &str) && !char_in(*str, ALPHA_NUM)) {
-			add_token(TT_RETURN_KW);
+			add_token(TOK_RETURN_KW);
 			str--;
 		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
 		} else if (skip_chars(&str, ALPHA) && !char_in(*str, NUM)) {
-			add_token_with_value(TT_IDENTIFIER, strndup(start, str - start));
+			add_token_with_value(TOK_IDENTIFIER, strndup(start, str - start));
 			str--;
 		} else if (skip_chars(&str, NUM) && !char_in(*str, ALPHA)) {
 			int *val = xmalloc(sizeof(*val));
 			*val = strtol(start, NULL, 10);
-			add_token_with_value(TT_INTEGER, val);
+			add_token_with_value(TOK_INTEGER, val);
 			str--;
 		} else {
 			const char *end = str;
@@ -127,7 +127,7 @@ struct token *lex(const char *str)
 
 		}
 	}
-	add_token(TT_NONE); /* sentinel */
+	add_token(TOK_NONE); /* sentinel */
 	REALLOC_ARRAY(tokens, nr); /* trim excess. */
 	return tokens;
 }
