@@ -51,15 +51,24 @@ const char *tt2str(enum token_type tt)
 	}
 }
 
+char *tok2str(struct token *t)
+{
+	const char *type_str = tt2str(t->type);
+	switch(t->type) {
+	case TOK_IDENTIFIER:
+		return xmkstr("%s '%s'", type_str, (char *)t->value);
+	case TOK_INTEGER:
+		return xmkstr("%s '%d'", type_str, *(int *)(t->value));
+	default:
+		return xstrdup(type_str);
+	}
+}
+
 void print_token(struct token *t)
 {
-	const char *tt_str = tt2str(t->type);
-	switch(t->type) {
-	case TOK_IDENTIFIER: printf("%s '%s'\n", tt_str, (char *)t->value); break;
-	case TOK_INTEGER: printf("%s '%d'\n", tt_str, *(int *)(t->value)); break;
-	default:
-		printf("%s\n", tt_str);
-	}
+	char *tok_str = tok2str(t);
+	printf("%s\n", tok_str);
+	free(tok_str);
 }
 
 void free_token(struct token *t)
