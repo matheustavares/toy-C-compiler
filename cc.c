@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include "util.h"
 #include "lexer.h"
+#include "parser.h"
 
 static void usage(const char *progname)
 {
@@ -43,6 +44,7 @@ int main(int argc, char **argv)
 {
 	char *file_buf;
 	struct token *tokens;
+	struct ast_program *prog;
 
 	/*
 	 * TODO: option controled output. Ideas:
@@ -61,7 +63,11 @@ int main(int argc, char **argv)
 		free_token(tok);
 	}
 
+	prog = parse_program(tokens);
+	print_ast_in_dot(prog);
+
 	free(tokens);
+	free_ast(prog);
 	free(file_buf);
 
 	return 0;
