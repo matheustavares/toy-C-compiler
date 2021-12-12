@@ -7,6 +7,10 @@
 #define WHITESPACE " \t\n"
 #define ALPHA_NUM (ALPHA NUM)
 
+/*
+ * Do not use this function if you want to include '\0' in `list`. As soon as
+ * it finds '\0', it terminates the search unsuccessfully.
+ */
 static int char_in(char c, const char *list)
 {
 	for (; *list; list++)
@@ -16,18 +20,14 @@ static int char_in(char c, const char *list)
 }
 
 /* 
- * Advances `str` to the first char that is not in `list`.
- * Returns 1 iff at least one position was advanced.
+ * Stores in `skipped` a pointer to the first char at `str` that is not in
+ * `list`. Returns 1 iff skipped was moved forward in `str`.
  */
-static int skip_chars(const char **str_p, const char *list)
+static int skip_chars(const char *str, const char *list, const char **skipped)
 {
-	int advanced = 0;
-	const char *str = *str_p;
-	for (; *str && char_in(*str, list); str++)
-		advanced = 1;
-	if (advanced)
-		*str_p = str;
-	return advanced;
+	for (*skipped = str; **skipped && char_in(**skipped, list); (*skipped)++)
+		;
+	return *skipped != str;
 }
 
 const char *tt2str(enum token_type tt)
@@ -99,7 +99,7 @@ struct token *lex(const char *str)
 		if (!*str)
 			break;
 
-		const char *start = str;
+		const char *aux;
 
 		if (*str == '{') {
 			add_token(TOK_OPEN_BRACE);
@@ -112,21 +112,21 @@ struct token *lex(const char *str)
 		} else if (*str == ';') {
 			add_token(TOK_SEMICOLON);
 
-		} else if (skip_prefix(str, "int", &str) && !char_in(*str, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
 			add_token(TOK_INT_KW);
-			str--;
-		} else if (skip_prefix(str, "return", &str) && !char_in(*str, ALPHA_NUM)) {
+			str = aux - 1;
+		} else if (skip_prefix(str, "return", &aux) && !char_in(*aux, ALPHA_NUM)) {
 			add_token(TOK_RETURN_KW);
-			str--;
+			str = aux - 1;
 		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
-		} else if (skip_chars(&str, ALPHA) && !char_in(*str, NUM)) {
-			add_token_with_value(TOK_IDENTIFIER, strndup(start, str - start));
-			str--;
-		} else if (skip_chars(&str, NUM) && !char_in(*str, ALPHA)) {
+		} else if (skip_chars(str, ALPHA, &aux) && !char_in(*aux, NUM)) {
+			add_token_with_value(TOK_IDENTIFIER, strndup(str, aux - str));
+			str = aux - 1;
+		} else if (skip_chars(str, NUM, &aux) && !char_in(*aux, ALPHA)) {
 			int *val = xmalloc(sizeof(*val));
-			*val = strtol(start, NULL, 10);
+			*val = strtol(str, NULL, 10);
 			add_token_with_value(TOK_INTEGER, val);
-			str--;
+			str = aux - 1;
 		} else {
 			const char *end = str;
 			while (*end && !char_in(*end, WHITESPACE))
