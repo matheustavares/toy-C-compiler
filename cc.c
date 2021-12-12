@@ -5,9 +5,14 @@
 #include "lexer.h"
 #include "parser.h"
 
-static void usage(const char *progname)
+static void usage(const char *progname, int err)
 {
-	die("usage: %s <c-file>", progname);
+	fprintf(stderr, "usage: %s [options] <c-file>\n", progname);
+	fprintf(stderr, "       -h|--help: this message\n");
+	fprintf(stderr, "       -l|--lex:  print the lex'ed tokens\n");
+	fprintf(stderr, "       -t|--tree: print the parsed tree in dot format\n");
+
+	exit(err ? 129 : 0);
 }
 
 static char *read_file(const char *filename)
@@ -40,29 +45,51 @@ static char *read_file(const char *filename)
 	return buf;
 }
 
+static void print_tokens(struct token *tokens)
+{
+	for (struct token *tok = tokens; !end_token(tok); tok++)
+		print_token(tok);
+}
+
 int main(int argc, char **argv)
 {
 	char *file_buf;
 	struct token *tokens;
 	struct ast_program *prog;
+	char **arg_cursor;
+	int print_lex = 0, print_tree = 0;
 
-	/*
-	 * TODO: option controled output. Ideas:
-	 * -l: prints the tokens as they were recognized by the lexer
-	 * -t: prints the ast (could also print in dot format)
-	 *  default: assembly?
-	 */
-	if (argc != 2)
-		usage(*argv);
+	for (arg_cursor = argv + 1; *arg_cursor; arg_cursor++) {
+		if (*arg_cursor[0] != '-')
+			break; /* not an option */
+		else if (!strcmp(*arg_cursor, "-h") || !strcmp(*arg_cursor, "--help"))
+			usage(*argv, 0);
+		else if (!strcmp(*arg_cursor, "-l") || !strcmp(*arg_cursor, "--lex"))
+			print_lex = 1;
+		else if (!strcmp(*arg_cursor, "-t") || !strcmp(*arg_cursor, "--tree"))
+			print_tree = 1;
+		else
+			die("unknown option '%s'", *arg_cursor);
+	}
 
-	file_buf = read_file(argv[1]);
+	if (!*arg_cursor || *(arg_cursor + 1)) {
+		error("expecting one positional argument: the C filename");
+		usage(*argv, 1);
+	}
+
+	if (print_tree && print_lex)
+		die("--lex and --tree are incompatible");
+
+	file_buf = read_file(*arg_cursor);
 	tokens = lex(file_buf);
-	
-	for (struct token *tok = tokens; !end_token(tok); tok++)
-		print_token(tok);
-
 	prog = parse_program(tokens);
-	print_ast_in_dot(prog);
+
+	if (print_lex)
+		print_tokens(tokens);
+	else if (print_tree)
+		print_ast_in_dot(prog);
+	else
+		error("sorry, cannot produce assembly yet. Please use -l or -t.");
 
 	free_tokens(tokens);
 	free_ast(prog);
