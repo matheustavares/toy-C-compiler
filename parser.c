@@ -24,7 +24,7 @@ exp = Constant(int)
 #define expect_type(tok, etype) \
 	do { \
 		if ((tok)->type != (etype)) \
-			error("parser: expecting '%s' got '%s'", \
+			die("parser: expecting '%s' got '%s'", \
 				    tt2str(etype), tok2str(tok)); \
 		(tok)++; \
 	} while(0)
