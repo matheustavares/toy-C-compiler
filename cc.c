@@ -58,15 +58,13 @@ int main(int argc, char **argv)
 	file_buf = read_file(argv[1]);
 	tokens = lex(file_buf);
 	
-	for (struct token *tok = tokens; !end_token(tok); tok++) {
+	for (struct token *tok = tokens; !end_token(tok); tok++)
 		print_token(tok);
-		free_token(tok);
-	}
 
 	prog = parse_program(tokens);
 	print_ast_in_dot(prog);
 
-	free(tokens);
+	free_tokens(tokens);
 	free_ast(prog);
 	free(file_buf);
 

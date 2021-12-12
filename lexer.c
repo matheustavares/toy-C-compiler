@@ -140,3 +140,10 @@ struct token *lex(const char *str)
 	REALLOC_ARRAY(tokens, nr); /* trim excess. */
 	return tokens;
 }
+
+void free_tokens(struct token *toks)
+{
+	for (struct token *tok = toks; !end_token(tok); tok++)
+		free_token(tok);
+	free(toks);
+}

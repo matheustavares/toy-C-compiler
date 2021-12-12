@@ -33,6 +33,7 @@ void print_token(struct token *t);
 const char *tt2str(enum token_type tt);
 char *tok2str(struct token *t);
 
+void free_tokens(struct token *toks);
 void free_token(struct token *t);
 
 #define end_token(tok) ((tok)->type == TOK_NONE)
