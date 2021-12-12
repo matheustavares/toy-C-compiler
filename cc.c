@@ -82,17 +82,25 @@ int main(int argc, char **argv)
 
 	file_buf = read_file(*arg_cursor);
 	tokens = lex(file_buf);
+
+	if (print_lex) {
+		print_tokens(tokens);
+		goto lex_out;
+	}
+
 	prog = parse_program(tokens);
 
-	if (print_lex)
-		print_tokens(tokens);
-	else if (print_tree)
+	if (print_tree) {
 		print_ast_in_dot(prog);
-	else
-		error("sorry, cannot produce assembly yet. Please use -l or -t.");
+		goto ast_out;
+	}
+	
+	error("sorry, cannot produce assembly yet. Please use -l or -t.");
 
-	free_tokens(tokens);
+ast_out:
 	free_ast(prog);
+lex_out:
+	free_tokens(tokens);
 	free(file_buf);
 
 	return 0;
