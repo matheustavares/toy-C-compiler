@@ -4,6 +4,7 @@
 #include "util.h"
 #include "lexer.h"
 #include "parser.h"
+#include "x86.h"
 
 static void usage(const char *progname, int err)
 {
@@ -51,12 +52,23 @@ static void print_tokens(struct token *tokens)
 		print_token(tok);
 }
 
+static char *mk_out_filename(const char *source_filename)
+{
+	size_t len;
+	strip_suffix(source_filename, ".c", &len);
+	char *out = xmalloc(len + 3);
+	memcpy(out, source_filename, len);
+	memcpy(out + len, ".s", 2);
+	out[len + 2] = '\0';
+	return out;
+}
+
 int main(int argc, char **argv)
 {
 	char *file_buf;
 	struct token *tokens;
 	struct ast_program *prog;
-	char **arg_cursor;
+	char **arg_cursor, *out_filename;
 	int print_lex = 0, print_tree = 0;
 
 	for (arg_cursor = argv + 1; *arg_cursor; arg_cursor++) {
@@ -95,8 +107,11 @@ int main(int argc, char **argv)
 		goto ast_out;
 	}
 	
-	error("sorry, cannot produce assembly yet. Please use -l or -t.");
+	out_filename = mk_out_filename(*arg_cursor);
+	generate_x86_asm(prog, out_filename);
+	fprintf(stderr, "Assembly written to '%s'\n", out_filename);
 
+	free(out_filename);
 ast_out:
 	free_ast(prog);
 lex_out:
