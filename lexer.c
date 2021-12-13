@@ -120,7 +120,7 @@ struct token *lex(const char *str)
 			str = aux - 1;
 		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
 		} else if (skip_chars(str, ALPHA, &aux) && !char_in(*aux, NUM)) {
-			add_token_with_value(TOK_IDENTIFIER, strndup(str, aux - str));
+			add_token_with_value(TOK_IDENTIFIER, xstrndup(str, aux - str));
 			str = aux - 1;
 		} else if (skip_chars(str, NUM, &aux) && !char_in(*aux, ALPHA)) {
 			int *val = xmalloc(sizeof(*val));

@@ -81,4 +81,12 @@ static char *xstrdup(const char *str)
 	return ret;
 }
 
+static char *xstrndup(const char *str, size_t size)
+{
+	char *ret = strndup(str, size);
+	if (!ret)
+		die_errno("strndup failed");
+	return ret;
+}
+
 #endif
