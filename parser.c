@@ -24,11 +24,11 @@ exp = Constant(int)
 #define expect_type(tok, etype) \
 	do { \
 		if ((tok)->type != (etype)) \
-			die("parser: expecting '%s' got '%s'", \
-				    tt2str(etype), tok2str(tok)); \
+			die("parser: expecting '%s' got '%s'\n%s", \
+			    tt2str(etype), tok2str(tok), \
+			    show_token_on_source_line(tok)); \
 		(tok)++; \
 	} while(0)
-
 
 static struct ast_expression *parse_exp(struct token **tok_ptr)
 {

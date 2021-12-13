@@ -4,6 +4,16 @@
 #include "lib/error.h"
 #include "lib/wrappers.h"
 
+static char *getline_dup(const char *str)
+{
+	const char *newline = strchr(str, '\n');
+	if (!newline)
+		return xstrdup(str);
+	size_t size = newline - str;
+	char *line = xmalloc(size + 1);
+	return strncpy(line, str, size);
+}
+
 /*
  * If the string "str" begins with the string found in "prefix", return 1.
  * The "out" parameter is set to "str + strlen(prefix)" (i.e., to the point in

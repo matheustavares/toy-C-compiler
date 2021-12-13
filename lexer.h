@@ -21,6 +21,10 @@ enum token_type {
 struct token {
 	enum token_type type;
 	void *value;
+
+	/* Token to source file mapping. */
+	const char *line;
+	size_t line_no, col_no;
 };
 
 struct token *lex(const char *str);
@@ -32,6 +36,8 @@ void print_token(struct token *t);
  */
 const char *tt2str(enum token_type tt);
 char *tok2str(struct token *t);
+
+char *show_token_on_source_line(struct token *tok);
 
 void free_tokens(struct token *toks);
 void free_token(struct token *t);
