@@ -16,6 +16,11 @@ enum token_type {
 
 	TOK_IDENTIFIER,
 	TOK_INTEGER,
+
+	/* operators */
+	TOK_MINUS,
+	TOK_TILDE,
+	TOK_EXCLAMATION,
 };
 
 struct token {
