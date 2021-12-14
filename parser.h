@@ -29,10 +29,19 @@ struct ast_node {
 struct ast_expression {
 	enum {
 		AST_EXP_CONSTANT_INT,
+		AST_EXP_UNARY_OP,
 	} type;
 
 	union {
 		int ival;
+		struct {
+			enum un_op_type {
+				EXP_OP_NEGATION,
+				EXP_OP_BIT_COMPLEMENT,
+				EXP_OP_LOGIC_NEGATION,
+			} type;
+			struct ast_expression *exp;
+		} un_op;
 	} u;
 };
 
