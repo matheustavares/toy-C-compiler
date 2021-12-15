@@ -8,14 +8,42 @@
 			die_errno("fprintf error"); \
 	} while (0)
 
+/* Convention: generate_expression should put the result in eax. */
+static void generate_expression(struct ast_expression *exp, FILE *file)
+{
+	switch (exp->type) {
+	case AST_EXP_UNARY_OP:
+		generate_expression(exp->u.un_op.exp, file);
+		switch (exp->u.un_op.type) {
+		case EXP_OP_NEGATION:
+			xfprintf(file, " neg	%%eax\n");
+			break;
+		case EXP_OP_BIT_COMPLEMENT:
+			xfprintf(file, " not	%%eax\n");
+			break;
+		case EXP_OP_LOGIC_NEGATION:
+			xfprintf(file, " cmpl	$0, %%eax\n");
+			xfprintf(file, " movl	$0, %%eax\n");
+			xfprintf(file, " sete	%%al\n");
+			break;
+		default:
+			die("generate x86: unknown unary op: %d", exp->u.un_op.type);
+		}
+		break;
+	case AST_EXP_CONSTANT_INT:
+		xfprintf(file, " movl	$%d, %%eax\n", exp->u.ival);
+		break;
+	default:
+		die("generate x86: unknown expression type %d", exp->type);
+	}
+}
+
 static void generate_statement(struct ast_statement *st, FILE *file)
 {
 	switch(st->type) {
 	case AST_ST_RETURN:
-		struct ast_expression *exp = st->u.ret_exp;
-		if (exp->type != AST_EXP_CONSTANT_INT)
-			die("generate x86: I don't know how to return non-constant expressions");
-		xfprintf(file, " movl	$%d, %%eax\n", exp->u.ival);
+		generate_expression(st->u.ret_exp, file);
+		/* exp value is on eax, so just return it. */
 		xfprintf(file, " ret\n");
 		break;
 	default:
