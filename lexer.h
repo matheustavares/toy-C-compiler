@@ -21,6 +21,9 @@ enum token_type {
 	TOK_MINUS,
 	TOK_TILDE,
 	TOK_EXCLAMATION,
+	TOK_PLUS,
+	TOK_STAR,
+	TOK_F_SLASH,
 };
 
 struct token {

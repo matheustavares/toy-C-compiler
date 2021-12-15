@@ -68,6 +68,9 @@ const char *tt2str(enum token_type tt)
 	case TOK_MINUS: return "-";
 	case TOK_TILDE: return "~";
 	case TOK_EXCLAMATION: return "!";
+	case TOK_PLUS: return "+";
+	case TOK_STAR: return "*";
+	case TOK_F_SLASH: return "/";
 	default:
 		die("Unknown token type: %d\n", tt);
 	}
@@ -154,6 +157,12 @@ struct token *lex(const char *str)
 			add_token(TOK_TILDE);
 		} else if (*str == '!') {
 			add_token(TOK_EXCLAMATION);
+		} else if (*str == '+') {
+			add_token(TOK_PLUS);
+		} else if (*str == '*') {
+			add_token(TOK_STAR);
+		} else if (*str == '/') {
+			add_token(TOK_F_SLASH);
 
 		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
 			add_token(TOK_INT_KW);
