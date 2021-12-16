@@ -12,6 +12,55 @@
 static void generate_expression(struct ast_expression *exp, FILE *file)
 {
 	switch (exp->type) {
+	case AST_EXP_BINARY_OP:
+		/*
+		 * "sub ecx eax" does "eax = eax - ecx". We calculate
+		 * rexp first so that its value ends up in ecx and lexp
+		 * ends up in eax, making them ready for the subtraction. We
+		 * could, instead, manipulate the registers after the
+		 * sub-expression is calculated, but it is easier to do it this
+		 * way.
+		 */
+		generate_expression(exp->u.bin_op.rexp, file);
+		/*
+		 * Saving this in a register would be faster, but we don't know
+		 * how many sub-expressions there is and register allocation is
+		 * more complex than simplying pushing this value into the
+		 * stack.
+		 */
+		xfprintf(file, " push	%%rax\n");
+		generate_expression(exp->u.bin_op.lexp, file);
+		xfprintf(file, " pop	%%rcx\n");
+
+		switch (exp->u.bin_op.type) {
+		case EXP_OP_ADDITION:
+			xfprintf(file, " add	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_SUBTRACTION:
+			xfprintf(file, " sub	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_MULTIPLICATION:
+			xfprintf(file, " imul	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_DIVISION:
+			/*
+			 * "idiv %ecx" does "eax = edx:eax // ecx". But edx
+			 * might already have some data, and we wouldn't want
+			 * to use random bits in our division. At first, it
+			 * seems that zeroing it would do the trick, but that
+			 * would break negative division, since '0*64:eax'
+			 * would represent a different number than 'eax' when
+			 * eax is negative. So we use cdq, which does a sign
+			 * extension of eax into edx:eax.
+			 */
+			xfprintf(file, " cdq\n");
+			xfprintf(file, " idiv	%%ecx\n");
+			break;
+		default:
+			die("generate x86: unknown binary op: %d", exp->u.bin_op.type);
+		}
+		break;
+
 	case AST_EXP_UNARY_OP:
 		generate_expression(exp->u.un_op.exp, file);
 		switch (exp->u.un_op.type) {
