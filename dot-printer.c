@@ -1,10 +1,38 @@
 #include "util.h"
 #include "dot-printer.h"
 #include "parser.h"
+#include "lib/array.h"
 
 /*******************************************************************************
  *		    Routines to print ASTs in dot format
 *******************************************************************************/
+
+/* The label to a dot node. */
+struct label_list {
+	char **arr;
+	size_t nr, alloc;
+};
+
+#define LABEL_LIST_INIT { NULL, 0, 0 }
+
+static size_t add_label(struct label_list *list, char *label)
+{
+	ALLOC_GROW(list->arr, list->nr + 1, list->alloc);
+	list->arr[list->nr] = label;
+	return list->nr++;
+}
+
+static void print_labels(struct label_list *labels)
+{
+	for (size_t i = 0; i < labels->nr; i++)
+		printf("  %zu [label=\"%s\"];\n", i, labels->arr[i]);
+}
+
+static void free_labels(struct label_list *labels)
+{
+	for (size_t i = 0; i < labels->nr; i++)
+		free(labels->arr[i]);
+}
 
 static const char *un_op_as_str(enum un_op_type type)
 {
@@ -27,61 +55,77 @@ static const char *bin_op_as_str(enum bin_op_type type)
 	}
 }
 
-static void print_ast_expression(struct ast_expression *exp)
+#define print_arc_start(id) printf(" %zu -> ", id)
+#define print_arc_end(id) printf("%zu;\n", id)
+
+static void print_ast_expression(struct ast_expression *exp, struct label_list *labels)
 {
 	const char *type_str;
+	size_t node_id;
+
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
 		type_str = bin_op_as_str(exp->u.bin_op.type);
-		printf("\"Binary Op '%s'\";\n", type_str);
-		printf("  \"Binary Op '%s'\" -> ", type_str);
-		print_ast_expression(exp->u.bin_op.lexp);
-		printf("  \"Binary Op '%s'\" -> ", type_str);
-		print_ast_expression(exp->u.bin_op.rexp);
+		node_id = add_label(labels, xmkstr("Binary op: '%s'", type_str));
+		print_arc_end(node_id);
+		print_arc_start(node_id);
+		print_ast_expression(exp->u.bin_op.lexp, labels);
+		print_arc_start(node_id);
+		print_ast_expression(exp->u.bin_op.rexp, labels);
 		break;
 	case AST_EXP_UNARY_OP:
 		type_str = un_op_as_str(exp->u.un_op.type);
-		printf("\"Unary Op '%s'\";\n", type_str);
-		printf("  \"Unary Op '%s'\" -> ", type_str);
-		print_ast_expression(exp->u.un_op.exp);
+		node_id = add_label(labels, xmkstr("Unary op: '%s'", type_str));
+		print_arc_end(node_id);
+		print_arc_start(node_id);
+		print_ast_expression(exp->u.un_op.exp, labels);
 		break;
 	case AST_EXP_CONSTANT_INT:
-		printf("\"Constant int '%d'\";\n", exp->u.ival);
+		node_id = add_label(labels, xmkstr("Constant int: '%d'", exp->u.ival));
+		print_arc_end(node_id);
 		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
 	}
 }
 
-static void print_ast_statement(struct ast_statement *st)
+static void print_ast_statement(struct ast_statement *st, struct label_list *labels)
 {
+	size_t node_id;
 	switch (st->type) {
 	case AST_ST_RETURN:
-		printf("Return;\n");
-		printf("  Return -> ");
-		print_ast_expression(st->u.ret_exp);
+		node_id = add_label(labels, xstrdup("Return"));
+		print_arc_end(node_id);
+		print_arc_start(node_id);
+		print_ast_expression(st->u.ret_exp, labels);
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
 }
 
-static void print_ast_func_decl (struct ast_func_decl *fun)
+static void print_ast_func_decl (struct ast_func_decl *fun, struct label_list *labels)
 {
-	printf("\"Function: %s\";\n", fun->name);
-	printf("  \"Function: %s\" -> ", fun->name);
-	print_ast_statement(fun->body);
+	size_t node_id = add_label(labels, xmkstr("Function: %s", fun->name));
+	print_arc_end(node_id);
+	print_arc_start(node_id);
+	print_ast_statement(fun->body, labels);
 }
 
-static void print_ast_program(struct ast_program *prog)
+static void print_ast_program(struct ast_program *prog, struct label_list *labels)
 {
-	printf("  Program -> ");
-	print_ast_func_decl(prog->fun);
+	size_t node_id = add_label(labels, xstrdup("Program"));
+	print_arc_start(node_id);
+	print_ast_func_decl(prog->fun, labels);
 }
 
 void print_ast_in_dot(struct ast_program *prog)
 {
+	struct label_list labels = LABEL_LIST_INIT;
 	printf("strict digraph {\n");
-	print_ast_program(prog);
+	print_ast_program(prog, &labels);
+	printf("\n");
+	print_labels(&labels);
 	printf("}\n");
+	free_labels(&labels);
 }
