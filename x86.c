@@ -71,8 +71,8 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 			xfprintf(file, " not	%%eax\n");
 			break;
 		case EXP_OP_LOGIC_NEGATION:
-			xfprintf(file, " cmpl	$0, %%eax\n");
-			xfprintf(file, " movl	$0, %%eax\n");
+			xfprintf(file, " cmp	$0, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
 			xfprintf(file, " sete	%%al\n");
 			break;
 		default:
@@ -80,7 +80,7 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 		}
 		break;
 	case AST_EXP_CONSTANT_INT:
-		xfprintf(file, " movl	$%d, %%eax\n", exp->u.ival);
+		xfprintf(file, " mov	$%d, %%eax\n", exp->u.ival);
 		break;
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
