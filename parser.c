@@ -100,8 +100,23 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 
 static inline int is_bin_op_tok(enum token_type tt)
 {
-	return tt == TOK_PLUS || tt == TOK_MINUS || tt == TOK_F_SLASH ||
-	       tt == TOK_STAR;
+	switch (tt) {
+	case TOK_PLUS:
+	case TOK_MINUS:
+	case TOK_STAR:
+	case TOK_F_SLASH:
+	case TOK_LOGIC_AND:
+	case TOK_LOGIC_OR:
+	case TOK_EQUAL:
+	case TOK_NOT_EQUAL:
+	case TOK_LT:
+	case TOK_LE:
+	case TOK_GT:
+	case TOK_GE:
+		return 1;
+	default:
+		return 0;
+	}
 }
 
 static enum un_op_type tt2bin_op_type(enum token_type type)
@@ -111,6 +126,14 @@ static enum un_op_type tt2bin_op_type(enum token_type type)
 	case TOK_PLUS: return EXP_OP_ADDITION;
 	case TOK_STAR: return EXP_OP_MULTIPLICATION;
 	case TOK_F_SLASH: return EXP_OP_DIVISION;
+	case TOK_LOGIC_AND: return EXP_OP_LOGIC_AND;
+	case TOK_LOGIC_OR: return EXP_OP_LOGIC_OR;
+	case TOK_EQUAL: return EXP_OP_EQUAL;
+	case TOK_NOT_EQUAL: return EXP_OP_NOT_EQUAL;
+	case TOK_LT: return EXP_OP_LT;
+	case TOK_LE: return EXP_OP_LE;
+	case TOK_GT: return EXP_OP_GT;
+	case TOK_GE: return EXP_OP_GE;
 	default: die("BUG: unknown token type at tt2bin_op_type: %d", type);
 	}
 }
@@ -127,6 +150,15 @@ static int bin_op_precedence(enum bin_op_type type)
 	case EXP_OP_ADDITION: return 12;
 	case EXP_OP_MULTIPLICATION: return 13;
 	case EXP_OP_DIVISION: return 13;
+	
+	case EXP_OP_LOGIC_AND: return 5;
+	case EXP_OP_LOGIC_OR: return 4;
+	case EXP_OP_EQUAL: return 9;
+	case EXP_OP_NOT_EQUAL: return 9;
+	case EXP_OP_LT: return 10;
+	case EXP_OP_LE: return 10;
+	case EXP_OP_GT: return 10;
+	case EXP_OP_GE: return 10;
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
 }
@@ -134,11 +166,25 @@ static int bin_op_precedence(enum bin_op_type type)
 enum associativity { ASSOC_LEFT, ASSOC_RIGHT };
 static enum associativity bin_op_associativity(enum bin_op_type type)
 {
+	/*
+	 * TODO: we could replace this switch-case and the one above with a
+	 * static array, associating 'enum bin_op_type's to pairs of
+	 * associativity and precedence.
+	 */
 	switch (type) {
-	case EXP_OP_SUBTRACTION: return ASSOC_LEFT;
-	case EXP_OP_ADDITION: return ASSOC_LEFT;
-	case EXP_OP_MULTIPLICATION: return ASSOC_LEFT;
-	case EXP_OP_DIVISION: return ASSOC_LEFT;
+	case EXP_OP_SUBTRACTION:
+	case EXP_OP_ADDITION:
+	case EXP_OP_MULTIPLICATION:
+	case EXP_OP_DIVISION:
+	case EXP_OP_LOGIC_AND:
+	case EXP_OP_LOGIC_OR:
+	case EXP_OP_EQUAL:
+	case EXP_OP_NOT_EQUAL:
+	case EXP_OP_LT:
+	case EXP_OP_LE:
+	case EXP_OP_GT:
+	case EXP_OP_GE:
+		return ASSOC_LEFT;
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
 }
