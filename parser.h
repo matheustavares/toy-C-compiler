@@ -1,7 +1,7 @@
 #ifndef _PARSER_H
 #define _PARSER_H
 
-#include "lexer.h"
+struct token;
 
 /*
 TODO: can we possibly simplify/unify the functions using some generic node
