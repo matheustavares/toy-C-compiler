@@ -4,6 +4,7 @@
 #include "util.h"
 #include "lexer.h"
 #include "parser.h"
+#include "dot-printer.h"
 #include "x86.h"
 
 static void usage(const char *progname, int err)

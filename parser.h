@@ -75,8 +75,6 @@ struct ast_program {
 };
 
 struct ast_program *parse_program(struct token *toks);
-void print_ast_in_dot(struct ast_program *prog);
-
 void free_ast(struct ast_program *prog);
 
 #endif
