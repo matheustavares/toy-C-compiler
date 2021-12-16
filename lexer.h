@@ -20,10 +20,20 @@ enum token_type {
 	/* operators */
 	TOK_MINUS,
 	TOK_TILDE,
-	TOK_EXCLAMATION,
 	TOK_PLUS,
 	TOK_STAR,
 	TOK_F_SLASH,
+
+	/* logical operators */
+	TOK_LOGIC_NOT,
+	TOK_LOGIC_AND,
+	TOK_LOGIC_OR,
+	TOK_EQUAL,
+	TOK_NOT_EQUAL,
+	TOK_LT,
+	TOK_LE,
+	TOK_GT,
+	TOK_GE,
 };
 
 struct token {

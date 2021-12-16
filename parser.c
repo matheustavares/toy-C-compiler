@@ -63,7 +63,7 @@ static enum un_op_type tt2un_op_type(enum token_type type)
 	switch (type) {
 	case TOK_MINUS: return EXP_OP_NEGATION;
 	case TOK_TILDE: return EXP_OP_BIT_COMPLEMENT;
-	case TOK_EXCLAMATION: return EXP_OP_LOGIC_NEGATION;
+	case TOK_LOGIC_NOT: return EXP_OP_LOGIC_NEGATION;
 	default: die("BUG: unknown token type at tt2un_op_type: %d", type);
 	}
 }
@@ -75,7 +75,7 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INTEGER, TOK_OPEN_PAR, TOK_MINUS, TOK_TILDE,
-		      TOK_EXCLAMATION, TOK_PLUS);
+		      TOK_LOGIC_NOT, TOK_PLUS);
 
 	if (tok[-1].type == TOK_INTEGER) {
 		exp = xmalloc(sizeof(*exp));

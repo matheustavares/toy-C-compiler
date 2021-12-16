@@ -67,10 +67,19 @@ const char *tt2str(enum token_type tt)
 	
 	case TOK_MINUS: return "-";
 	case TOK_TILDE: return "~";
-	case TOK_EXCLAMATION: return "!";
 	case TOK_PLUS: return "+";
 	case TOK_STAR: return "*";
 	case TOK_F_SLASH: return "/";
+	
+	case TOK_LOGIC_NOT: return "!";
+	case TOK_LOGIC_AND: return "&&";
+	case TOK_LOGIC_OR: return "||";
+	case TOK_EQUAL: return "==";
+	case TOK_NOT_EQUAL: return "!=";
+	case TOK_LT: return "<";
+	case TOK_LE: return "<=";
+	case TOK_GT: return ">";
+	case TOK_GE: return ">=";
 	default:
 		die("Unknown token type: %d\n", tt);
 	}
@@ -155,14 +164,44 @@ struct token *lex(const char *str)
 			add_token(TOK_MINUS);
 		} else if (*str == '~') {
 			add_token(TOK_TILDE);
-		} else if (*str == '!') {
-			add_token(TOK_EXCLAMATION);
 		} else if (*str == '+') {
 			add_token(TOK_PLUS);
 		} else if (*str == '*') {
 			add_token(TOK_STAR);
 		} else if (*str == '/') {
 			add_token(TOK_F_SLASH);
+
+		} else if (*str == '!') {
+			add_token(TOK_LOGIC_NOT);
+		} else if (skip_prefix(str, "&&", &aux)) {
+			add_token(TOK_LOGIC_AND);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "||", &aux)) {
+			add_token(TOK_LOGIC_OR);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "==", &aux)) {
+			add_token(TOK_EQUAL);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "!=", &aux)) {
+			add_token(TOK_NOT_EQUAL);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "<=", &aux)) {
+			add_token(TOK_LE);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, ">=", &aux)) {
+			add_token(TOK_GE);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (*str == '>') {
+			add_token(TOK_GT);
+		} else if (*str == '<') {
+			add_token(TOK_LT);
+
 
 		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
 			add_token(TOK_INT_KW);
