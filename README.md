@@ -18,7 +18,13 @@ $ ./cc -t file.c | dot -Tpng | display
 # ImageMagick (display) to show it.
 ```
 
+## Overfiew of the files
+
+- lexer.c: the tokenizer
+- parser.c: a recursive descent parser
+- x86.c: code generation to x86\_64 assembly (AT&T syntax)
+- lib: miscellaneous utilities to handle errors, arrays, etc.
+
 ## Testing
 
 See [https://github.com/nlsandler/write_a_c_compiler](https://github.com/nlsandler/write_a_c_compiler).
-
