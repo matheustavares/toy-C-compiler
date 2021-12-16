@@ -75,7 +75,7 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INTEGER, TOK_OPEN_PAR, TOK_MINUS, TOK_TILDE,
-		      TOK_EXCLAMATION);
+		      TOK_EXCLAMATION, TOK_PLUS);
 
 	if (tok[-1].type == TOK_INTEGER) {
 		exp = xmalloc(sizeof(*exp));
@@ -84,6 +84,9 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	} else if (tok[-1].type == TOK_OPEN_PAR) {
 		exp = parse_exp(&tok);
 		check_and_pop(&tok, TOK_CLOSE_PAR);
+	} else if (tok[-1].type == TOK_PLUS) {
+		/* This unary operator does nothing, so we just remove it. */
+		exp = parse_exp_atom(&tok);
 	} else {
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_UNARY_OP;
