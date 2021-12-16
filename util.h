@@ -14,6 +14,16 @@ static char *getline_dup(const char *str)
 	return strncpy(line, str, size);
 }
 
+static char *tab2sp(char *str, int width)
+{
+	if (width != 1)
+		die("BUG: sorry, tab2sp currently only accepts width of 1");
+	for (char *c = str; *c; c++)
+		if (*c == '\t')
+			*c = ' ';
+	return str;
+}
+
 /*
  * If the string "str" begins with the string found in "prefix", return 1.
  * The "out" parameter is set to "str + strlen(prefix)" (i.e., to the point in

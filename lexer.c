@@ -117,7 +117,7 @@ struct token *lex(const char *str)
 		tokens[nr].type = t; \
 		tokens[nr].value = v; \
 		 /* TODO: it's wasteful to dup the line for evert token in it. */ \
-		tokens[nr].line = getline_dup(line_start); \
+		tokens[nr].line = tab2sp(getline_dup(line_start), 1); \
 		tokens[nr].line_no = line_no; \
 		tokens[nr].col_no = col_no; \
 		nr++; \
