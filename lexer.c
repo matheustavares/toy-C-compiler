@@ -109,7 +109,7 @@ struct token *lex(const char *str)
 	struct token *tokens = NULL;
 	size_t alloc = 0, nr = 0;
 	const char *line_start = str;
-	size_t line_no = 0, col_no = 0;
+	size_t line_no = 1, col_no = 0;
 
 #define add_token_with_value(t, v) \
 	do { \
