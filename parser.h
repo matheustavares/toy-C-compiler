@@ -30,6 +30,7 @@ struct ast_expression {
 	enum {
 		AST_EXP_CONSTANT_INT,
 		AST_EXP_UNARY_OP,
+		AST_EXP_BINARY_OP,
 	} type;
 
 	union {
@@ -42,6 +43,15 @@ struct ast_expression {
 			} type;
 			struct ast_expression *exp;
 		} un_op;
+		struct {
+			enum bin_op_type {
+				EXP_OP_ADDITION,
+				EXP_OP_SUBTRACTION,
+				EXP_OP_DIVISION,
+				EXP_OP_MULTIPLICATION,
+			} type;
+			struct ast_expression *lexp, *rexp;
+		} bin_op;
 	} u;
 };
 
