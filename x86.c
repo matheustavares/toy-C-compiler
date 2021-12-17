@@ -121,6 +121,12 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 			xfprintf(file, " cdq\n");
 			xfprintf(file, " idiv	%%ecx\n");
 			break;
+		case EXP_OP_MODULO:
+			xfprintf(file, " cdq\n");
+			xfprintf(file, " idiv	%%ecx\n");
+			/* idiv stores the remainder in edx. */
+			xfprintf(file, " mov	%%edx, %%eax\n");
+			break;
 		case EXP_OP_EQUAL:
 			xfprintf(file, " cmp	%%ecx, %%eax\n");
 			xfprintf(file, " mov	$0, %%eax\n");
@@ -151,6 +157,23 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 			xfprintf(file, " mov	$0, %%eax\n");
 			xfprintf(file, " setge	%%al\n");
 			break;
+
+		case EXP_OP_BITWISE_AND:
+			xfprintf(file, " and	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_BITWISE_OR:
+			xfprintf(file, " or	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_BITWISE_XOR:
+			xfprintf(file, " xor	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_BITWISE_LEFT_SHIFT:
+			xfprintf(file, " shl	%%ecx, %%eax\n");
+			break;
+		case EXP_OP_BITWISE_RIGHT_SHIFT:
+			xfprintf(file, " shr	%%ecx, %%eax\n");
+			break;
+
 		default:
 			die("generate x86: unknown binary op: %d", bin_op_type);
 		}
