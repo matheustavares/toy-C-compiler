@@ -49,6 +49,7 @@ struct ast_expression {
 				EXP_OP_SUBTRACTION,
 				EXP_OP_DIVISION,
 				EXP_OP_MULTIPLICATION,
+				EXP_OP_MODULO,
 
 				EXP_OP_LOGIC_AND,
 				EXP_OP_LOGIC_OR,
@@ -58,6 +59,13 @@ struct ast_expression {
 				EXP_OP_LE,
 				EXP_OP_GT,
 				EXP_OP_GE,
+
+				EXP_OP_BITWISE_AND,
+				EXP_OP_BITWISE_OR,
+				EXP_OP_BITWISE_XOR,
+				EXP_OP_BITWISE_LEFT_SHIFT,
+				EXP_OP_BITWISE_RIGHT_SHIFT,
+
 			} type;
 			struct ast_expression *lexp, *rexp;
 		} bin_op;

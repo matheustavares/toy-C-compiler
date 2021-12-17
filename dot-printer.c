@@ -51,6 +51,7 @@ static const char *bin_op_as_str(enum bin_op_type type)
 	case EXP_OP_SUBTRACTION: return "-";
 	case EXP_OP_DIVISION: return "/";
 	case EXP_OP_MULTIPLICATION: return "*";
+	case EXP_OP_MODULO: return "%";
 
 	case EXP_OP_LOGIC_AND: return "&&";
 	case EXP_OP_LOGIC_OR: return "||";
@@ -60,6 +61,13 @@ static const char *bin_op_as_str(enum bin_op_type type)
 	case EXP_OP_LE: return "<=";
 	case EXP_OP_GT: return ">";
 	case EXP_OP_GE: return ">=";
+
+	case EXP_OP_BITWISE_AND: return "&";
+	case EXP_OP_BITWISE_OR: return "|";
+	case EXP_OP_BITWISE_XOR: return "^";
+	case EXP_OP_BITWISE_LEFT_SHIFT: return "<<";
+	case EXP_OP_BITWISE_RIGHT_SHIFT: return ">>";
+
 	default: die("BUG: unknown bin_op type %d", type);
 	}
 }

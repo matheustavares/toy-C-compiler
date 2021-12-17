@@ -105,6 +105,7 @@ static inline int is_bin_op_tok(enum token_type tt)
 	case TOK_MINUS:
 	case TOK_STAR:
 	case TOK_F_SLASH:
+	case TOK_MODULO:
 	case TOK_LOGIC_AND:
 	case TOK_LOGIC_OR:
 	case TOK_EQUAL:
@@ -113,6 +114,11 @@ static inline int is_bin_op_tok(enum token_type tt)
 	case TOK_LE:
 	case TOK_GT:
 	case TOK_GE:
+	case TOK_BITWISE_AND:
+	case TOK_BITWISE_OR:
+	case TOK_BITWISE_XOR:
+	case TOK_BITWISE_LEFT_SHIFT:
+	case TOK_BITWISE_RIGHT_SHIFT:
 		return 1;
 	default:
 		return 0;
@@ -126,6 +132,7 @@ static enum un_op_type tt2bin_op_type(enum token_type type)
 	case TOK_PLUS: return EXP_OP_ADDITION;
 	case TOK_STAR: return EXP_OP_MULTIPLICATION;
 	case TOK_F_SLASH: return EXP_OP_DIVISION;
+	case TOK_MODULO: return EXP_OP_MODULO;
 	case TOK_LOGIC_AND: return EXP_OP_LOGIC_AND;
 	case TOK_LOGIC_OR: return EXP_OP_LOGIC_OR;
 	case TOK_EQUAL: return EXP_OP_EQUAL;
@@ -134,6 +141,11 @@ static enum un_op_type tt2bin_op_type(enum token_type type)
 	case TOK_LE: return EXP_OP_LE;
 	case TOK_GT: return EXP_OP_GT;
 	case TOK_GE: return EXP_OP_GE;
+	case TOK_BITWISE_AND: return EXP_OP_BITWISE_AND;
+	case TOK_BITWISE_OR: return EXP_OP_BITWISE_OR;
+	case TOK_BITWISE_XOR: return EXP_OP_BITWISE_XOR;
+	case TOK_BITWISE_LEFT_SHIFT: return EXP_OP_BITWISE_LEFT_SHIFT;
+	case TOK_BITWISE_RIGHT_SHIFT: return EXP_OP_BITWISE_RIGHT_SHIFT;
 	default: die("BUG: unknown token type at tt2bin_op_type: %d", type);
 	}
 }
@@ -146,19 +158,36 @@ static int bin_op_precedence(enum bin_op_type type)
 	 * highest precedence group.
 	 */
 	switch (type) {
-	case EXP_OP_SUBTRACTION: return 12;
-	case EXP_OP_ADDITION: return 12;
-	case EXP_OP_MULTIPLICATION: return 13;
-	case EXP_OP_DIVISION: return 13;
+	case EXP_OP_SUBTRACTION:
+	case EXP_OP_ADDITION:
+		return 12;
+
+	case EXP_OP_MULTIPLICATION:
+	case EXP_OP_DIVISION:
+	case EXP_OP_MODULO:
+		return 13;
 
 	case EXP_OP_LOGIC_AND: return 5;
 	case EXP_OP_LOGIC_OR: return 4;
-	case EXP_OP_EQUAL: return 9;
-	case EXP_OP_NOT_EQUAL: return 9;
-	case EXP_OP_LT: return 10;
-	case EXP_OP_LE: return 10;
-	case EXP_OP_GT: return 10;
-	case EXP_OP_GE: return 10;
+
+	case EXP_OP_EQUAL:
+	case EXP_OP_NOT_EQUAL:
+		return 9;
+
+	case EXP_OP_LT:
+	case EXP_OP_LE:
+	case EXP_OP_GT:
+	case EXP_OP_GE:
+		return 10;
+
+	case EXP_OP_BITWISE_AND: return 8;
+	case EXP_OP_BITWISE_OR: return 6;
+	case EXP_OP_BITWISE_XOR: return 7;
+
+	case EXP_OP_BITWISE_LEFT_SHIFT:
+	case EXP_OP_BITWISE_RIGHT_SHIFT:
+		return 11;
+
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
 }
@@ -176,6 +205,7 @@ static enum associativity bin_op_associativity(enum bin_op_type type)
 	case EXP_OP_ADDITION:
 	case EXP_OP_MULTIPLICATION:
 	case EXP_OP_DIVISION:
+	case EXP_OP_MODULO:
 	case EXP_OP_LOGIC_AND:
 	case EXP_OP_LOGIC_OR:
 	case EXP_OP_EQUAL:
@@ -184,6 +214,11 @@ static enum associativity bin_op_associativity(enum bin_op_type type)
 	case EXP_OP_LE:
 	case EXP_OP_GT:
 	case EXP_OP_GE:
+	case EXP_OP_BITWISE_AND:
+	case EXP_OP_BITWISE_OR:
+	case EXP_OP_BITWISE_XOR:
+	case EXP_OP_BITWISE_LEFT_SHIFT:
+	case EXP_OP_BITWISE_RIGHT_SHIFT:
 		return ASSOC_LEFT;
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
