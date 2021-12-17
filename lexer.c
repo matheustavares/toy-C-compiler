@@ -76,6 +76,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_BITWISE_XOR: return "^";
 	case TOK_BITWISE_LEFT_SHIFT: return "<<";
 	case TOK_BITWISE_RIGHT_SHIFT: return ">>";
+	case TOK_ASSIGNMENT: return "=";
 	
 	case TOK_LOGIC_NOT: return "!";
 	case TOK_LOGIC_AND: return "&&";
@@ -215,13 +216,15 @@ struct token *lex(const char *str)
 			col_no += aux - 1 - str;
 			str = aux - 1;
 
-		/* These must come after ">*" and "<*" tokens. */
+		/* These must come after ">*", "<*", and "=*" tokens. */
 		} else if (*str == '>') {
 			add_token(TOK_GT);
 		} else if (*str == '<') {
 			add_token(TOK_LT);
 		} else if (*str == '!') {
 			add_token(TOK_LOGIC_NOT);
+		} else if (*str == '=') {
+			add_token(TOK_ASSIGNMENT);
 
 		/* These must come after "&*" and "|*" tokens. */
 		} else if (*str == '&') {

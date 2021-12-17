@@ -29,6 +29,7 @@ enum token_type {
 	TOK_BITWISE_XOR,
 	TOK_BITWISE_LEFT_SHIFT,
 	TOK_BITWISE_RIGHT_SHIFT,
+	TOK_ASSIGNMENT,
 
 	/* logical operators */
 	TOK_LOGIC_NOT,
