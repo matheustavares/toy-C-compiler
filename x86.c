@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <assert.h>
 #include "parser.h"
 #include "util.h"
 
@@ -8,11 +9,75 @@
 			die_errno("fprintf error"); \
 	} while (0)
 
+static void generate_expression(struct ast_expression *exp, FILE *file);
+
+static char *label_or_skip_2nd_clause(void)
+{
+	static unsigned long counter = 0; 
+	return xmkstr("_or_skip_2nd_clause_%lu", counter++);
+}
+
+static void generate_logic_or(struct ast_expression *exp, FILE *file)
+{
+	assert(exp->type == AST_EXP_BINARY_OP &&
+	       exp->u.bin_op.type == EXP_OP_LOGIC_OR);
+
+	char *label_skip_2nd_clause = label_or_skip_2nd_clause();
+
+	generate_expression(exp->u.bin_op.lexp, file);
+	xfprintf(file, " cmp	$0, %%eax\n");
+	xfprintf(file, " jne	%s\n", label_skip_2nd_clause);
+	generate_expression(exp->u.bin_op.rexp, file);
+	xfprintf(file, " cmp	$0, %%eax\n");
+	xfprintf(file, "%s:\n", label_skip_2nd_clause);
+	xfprintf(file, " mov	$0, %%eax\n");
+	xfprintf(file, " setne	%%al\n");
+	free(label_skip_2nd_clause);
+}
+
+static char *label_and_skip_2nd_clause(void)
+{
+	static unsigned long counter = 0;
+	return xmkstr("_and_skip_2nd_clause_%lu", counter++);
+}
+
+static void generate_logic_and(struct ast_expression *exp, FILE *file)
+{
+	assert(exp->type == AST_EXP_BINARY_OP &&
+	       exp->u.bin_op.type == EXP_OP_LOGIC_AND);
+
+	char *label_skip_2nd_clause = label_and_skip_2nd_clause();
+
+	generate_expression(exp->u.bin_op.lexp, file);
+	xfprintf(file, " cmp	$0, %%eax\n");
+	xfprintf(file, " je	%s\n", label_skip_2nd_clause);
+	generate_expression(exp->u.bin_op.rexp, file);
+	xfprintf(file, " cmp	$0, %%eax\n");
+	xfprintf(file, "%s:\n", label_skip_2nd_clause);
+	xfprintf(file, " mov	$0, %%eax\n");
+	xfprintf(file, " setne	%%al\n");
+	free(label_skip_2nd_clause);
+}
+
 /* Convention: generate_expression should put the result in eax. */
 static void generate_expression(struct ast_expression *exp, FILE *file)
 {
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
+		enum bin_op_type bin_op_type = exp->u.bin_op.type;
+
+		/*
+		 * We check these first because they have their own semantics
+		 * regarding the calculation (or not) of the right expresion.
+		 */
+		if (bin_op_type == EXP_OP_LOGIC_AND) {
+			generate_logic_and(exp, file);
+			return;
+		} else if (bin_op_type == EXP_OP_LOGIC_OR) {
+			generate_logic_or(exp, file);
+			return;
+		}
+
 		/*
 		 * "sub ecx eax" does "eax = eax - ecx". We calculate
 		 * rexp first so that its value ends up in ecx and lexp
@@ -32,7 +97,7 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 		generate_expression(exp->u.bin_op.lexp, file);
 		xfprintf(file, " pop	%%rcx\n");
 
-		switch (exp->u.bin_op.type) {
+		switch (bin_op_type) {
 		case EXP_OP_ADDITION:
 			xfprintf(file, " add	%%ecx, %%eax\n");
 			break;
@@ -56,8 +121,38 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 			xfprintf(file, " cdq\n");
 			xfprintf(file, " idiv	%%ecx\n");
 			break;
+		case EXP_OP_EQUAL:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " sete	%%al\n");
+			break;
+		case EXP_OP_NOT_EQUAL:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " setne	%%al\n");
+			break;
+		case EXP_OP_LT:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " setl	%%al\n");
+			break;
+		case EXP_OP_LE:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " setle	%%al\n");
+			break;
+		case EXP_OP_GT:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " setg	%%al\n");
+			break;
+		case EXP_OP_GE:
+			xfprintf(file, " cmp	%%ecx, %%eax\n");
+			xfprintf(file, " mov	$0, %%eax\n");
+			xfprintf(file, " setge	%%al\n");
+			break;
 		default:
-			die("generate x86: unknown binary op: %d", exp->u.bin_op.type);
+			die("generate x86: unknown binary op: %d", bin_op_type);
 		}
 		break;
 
