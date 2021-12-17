@@ -150,7 +150,7 @@ static int bin_op_precedence(enum bin_op_type type)
 	case EXP_OP_ADDITION: return 12;
 	case EXP_OP_MULTIPLICATION: return 13;
 	case EXP_OP_DIVISION: return 13;
-	
+
 	case EXP_OP_LOGIC_AND: return 5;
 	case EXP_OP_LOGIC_OR: return 4;
 	case EXP_OP_EQUAL: return 9;

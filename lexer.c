@@ -19,7 +19,7 @@ static int char_in(char c, const char *list)
 	return 0;
 }
 
-/* 
+/*
  * Stores in `skipped` a pointer to the first char at `str` that is not in
  * `list`. Returns 1 iff skipped was moved forward in `str`.
  */
