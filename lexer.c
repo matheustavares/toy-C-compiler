@@ -171,8 +171,6 @@ struct token *lex(const char *str)
 		} else if (*str == '/') {
 			add_token(TOK_F_SLASH);
 
-		} else if (*str == '!') {
-			add_token(TOK_LOGIC_NOT);
 		} else if (skip_prefix(str, "&&", &aux)) {
 			add_token(TOK_LOGIC_AND);
 			col_no += aux - 1 - str;
@@ -201,6 +199,8 @@ struct token *lex(const char *str)
 			add_token(TOK_GT);
 		} else if (*str == '<') {
 			add_token(TOK_LT);
+		} else if (*str == '!') {
+			add_token(TOK_LOGIC_NOT);
 
 
 		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
