@@ -70,6 +70,12 @@ const char *tt2str(enum token_type tt)
 	case TOK_PLUS: return "+";
 	case TOK_STAR: return "*";
 	case TOK_F_SLASH: return "/";
+	case TOK_MODULO: return "%";
+	case TOK_BITWISE_AND: return "&";
+	case TOK_BITWISE_OR: return "|";
+	case TOK_BITWISE_XOR: return "^";
+	case TOK_BITWISE_LEFT_SHIFT: return "<<";
+	case TOK_BITWISE_RIGHT_SHIFT: return ">>";
 	
 	case TOK_LOGIC_NOT: return "!";
 	case TOK_LOGIC_AND: return "&&";
@@ -170,6 +176,10 @@ struct token *lex(const char *str)
 			add_token(TOK_STAR);
 		} else if (*str == '/') {
 			add_token(TOK_F_SLASH);
+		} else if (*str == '%') {
+			add_token(TOK_MODULO);
+		} else if (*str == '^') {
+			add_token(TOK_BITWISE_XOR);
 
 		} else if (skip_prefix(str, "&&", &aux)) {
 			add_token(TOK_LOGIC_AND);
@@ -195,12 +205,29 @@ struct token *lex(const char *str)
 			add_token(TOK_GE);
 			col_no += aux - 1 - str;
 			str = aux - 1;
+
+		} else if (skip_prefix(str, "<<", &aux)) {
+			add_token(TOK_BITWISE_LEFT_SHIFT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, ">>", &aux)) {
+			add_token(TOK_BITWISE_RIGHT_SHIFT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+
+		/* These must come after ">*" and "<*" tokens. */
 		} else if (*str == '>') {
 			add_token(TOK_GT);
 		} else if (*str == '<') {
 			add_token(TOK_LT);
 		} else if (*str == '!') {
 			add_token(TOK_LOGIC_NOT);
+
+		/* These must come after "&*" and "|*" tokens. */
+		} else if (*str == '&') {
+			add_token(TOK_BITWISE_AND);
+		} else if (*str == '|') {
+			add_token(TOK_BITWISE_OR);
 
 
 		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
