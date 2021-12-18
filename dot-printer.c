@@ -101,6 +101,18 @@ static void print_ast_expression(struct ast_expression *exp, struct label_list *
 		node_id = add_label(labels, xmkstr("Constant int: '%d'", exp->u.ival));
 		print_arc_end(node_id);
 		break;
+	case AST_EXP_ASSIGNMENT:
+		node_id = add_label(labels, xmkstr("Assignment"));
+		print_arc_end(node_id);
+		print_arc_start(node_id);
+		print_arc_end(add_label(labels, xmkstr("Variable '%s'", exp->u.assign.name)));
+		print_arc_start(node_id);
+		print_ast_expression(exp->u.assign.exp, labels);
+		break;
+	case AST_EXP_VAR:
+		node_id = add_label(labels, xmkstr("Variable '%s'", exp->u.var_name));
+		print_arc_end(node_id);
+		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
 	}
@@ -116,6 +128,20 @@ static void print_ast_statement(struct ast_statement *st, struct label_list *lab
 		print_arc_start(node_id);
 		print_ast_expression(st->u.ret_exp, labels);
 		break;
+	case AST_ST_VAR_DECL:
+		node_id = add_label(labels, xmkstr("Declare variable '%s'", st->u.decl->name));
+		print_arc_end(node_id);
+		if (st->u.decl->value) {
+			print_arc_start(node_id);
+			node_id = add_label(labels, xmkstr("with value"));
+			print_arc_end(node_id);
+			print_arc_start(node_id);
+			print_ast_expression(st->u.decl->value, labels);
+		}
+		break;
+	case AST_ST_EXPRESSION:
+		print_ast_expression(st->u.exp, labels);
+		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
@@ -125,8 +151,10 @@ static void print_ast_func_decl (struct ast_func_decl *fun, struct label_list *l
 {
 	size_t node_id = add_label(labels, xmkstr("Function: %s", fun->name));
 	print_arc_end(node_id);
-	print_arc_start(node_id);
-	print_ast_statement(fun->body, labels);
+	for (struct ast_statement *st = fun->body; st; st = st->next) {
+		print_arc_start(node_id);
+		print_ast_statement(st, labels);
+	}
 }
 
 static void print_ast_program(struct ast_program *prog, struct label_list *labels)

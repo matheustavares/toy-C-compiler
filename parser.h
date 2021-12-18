@@ -31,6 +31,8 @@ struct ast_expression {
 		AST_EXP_CONSTANT_INT,
 		AST_EXP_UNARY_OP,
 		AST_EXP_BINARY_OP,
+		AST_EXP_ASSIGNMENT,
+		AST_EXP_VAR,
 	} type;
 
 	union {
@@ -69,17 +71,36 @@ struct ast_expression {
 			} type;
 			struct ast_expression *lexp, *rexp;
 		} bin_op;
+
+		struct {
+			char *name;
+			struct ast_expression *exp;
+		} assign;
+
+		char *var_name;
 	} u;
+};
+
+struct ast_var_decl {
+	char *name;
+	struct ast_expression *value; /* optional */
 };
 
 struct ast_statement {
 	enum {
 		AST_ST_RETURN,
+		AST_ST_VAR_DECL,
+		AST_ST_EXPRESSION,
 	} type;
 
 	union {
+		/* TODO: maybe should unify `ret_exp` and `exp`? */
 		struct ast_expression *ret_exp;
+		struct ast_expression *exp;
+		struct ast_var_decl *decl;
 	} u;
+
+	struct ast_statement *next;
 };
 
 struct ast_func_decl {

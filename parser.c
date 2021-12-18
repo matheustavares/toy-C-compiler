@@ -33,30 +33,37 @@ static char *str_join_token_types(const char *clause, va_list tt_list)
 }
 
 /* Don't use this directly, use check_and_pop() instead. */
-static void check_and_pop_1(struct token **tok_ptr, ...)
+static enum token_type check_and_pop_1(struct token **tok_ptr, int abort_on_miss, ...)
 {
 	va_list args;
-	va_start(args, tok_ptr);
+	va_start(args, abort_on_miss);
 	for (enum token_type etype = va_arg(args, enum token_type);
 	     etype != TOK_NONE;
 	     etype = va_arg(args, enum token_type)) {
 		if ((*tok_ptr)->type == etype) {
 			va_end(args);
 			(*tok_ptr)++;
-			return;
+			return etype;
 		}
 	}
 	va_end(args);
 
-	va_start(args, tok_ptr);
-	die("parser: expecting %s got %s\n%s", \
-	    str_join_token_types("or", args), tok2str(*tok_ptr), \
-			    show_token_on_source_line(*tok_ptr)); \
-	va_end(args);
+	if (abort_on_miss) {
+		va_start(args, abort_on_miss);
+		die("parser: expecting %s got %s\n%s", \
+		    str_join_token_types("or", args), tok2str(*tok_ptr), \
+				    show_token_on_source_line(*tok_ptr)); \
+		va_end(args);
+	}
+
+	return 0; /* TOK_NONE */
 }
 
 #define check_and_pop(tok_ptr, ...) \
-	check_and_pop_1(tok_ptr, __VA_ARGS__, TOK_NONE)
+	check_and_pop_1(tok_ptr, 1, __VA_ARGS__, TOK_NONE)
+
+#define check_and_pop_gently(tok_ptr, ...) \
+	check_and_pop_1(tok_ptr, 0, __VA_ARGS__, TOK_NONE)
 
 static enum un_op_type tt2un_op_type(enum token_type type)
 {
@@ -75,7 +82,7 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INTEGER, TOK_OPEN_PAR, TOK_MINUS, TOK_TILDE,
-		      TOK_LOGIC_NOT, TOK_PLUS);
+		      TOK_LOGIC_NOT, TOK_PLUS, TOK_IDENTIFIER);
 
 	if (tok[-1].type == TOK_INTEGER) {
 		exp = xmalloc(sizeof(*exp));
@@ -84,10 +91,21 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	} else if (tok[-1].type == TOK_OPEN_PAR) {
 		exp = parse_exp(&tok);
 		check_and_pop(&tok, TOK_CLOSE_PAR);
+	} else if (tok[-1].type == TOK_IDENTIFIER) {
+		exp = xmalloc(sizeof(*exp));
+		exp->type = AST_EXP_VAR;
+		exp->u.var_name = xstrdup((char *)tok[-1].value);
 	} else if (tok[-1].type == TOK_PLUS) {
 		/* This unary operator does nothing, so we just remove it. */
 		exp = parse_exp_atom(&tok);
 	} else {
+		/*
+		 * TODO: considering unary operators as part of the atom only
+		 * works now because our unary operators have the highest
+		 * precedence among all implemented operators. But if we add
+		 * "->", ".", "++", "() (function call)" or others with a
+		 * higher precedence, we must take care.
+		 */
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_UNARY_OP;
 		exp->u.un_op.type = tt2un_op_type(tok[-1].type);
@@ -259,17 +277,69 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 
 static struct ast_expression *parse_exp(struct token **tok_ptr)
 {
-	return parse_exp_1(tok_ptr, 1);
+	struct token *tok = *tok_ptr;
+	struct ast_expression *exp;
+
+	/*
+	 * TODO: this is a bit weird. But the problem is that we cannot handle
+	 * assignment as the other binary operators because the left side cannot
+	 * be an expression. It must be a variable *only*. Note, for example,
+	 * that the following is invalid:
+	 *	return a = 2 || b = 3;
+	 * Because "= 3" requires the left side to be a variable. The above
+	 * would be evaluated as:
+	 *     return a = (2 || b) = 3;
+	 *
+	 * But maybe we can encode that in the binary expression code using
+	 * precedence ("=" has a very low precedence), and then checking that
+	 * the left side is a variable.
+	 */
+	if (tok->type == TOK_IDENTIFIER && (tok + 1)->type == TOK_ASSIGNMENT) {
+		exp = xmalloc(sizeof(*exp));
+		exp->type = AST_EXP_ASSIGNMENT;
+		exp->u.assign.name = xstrdup((char *)tok->value);
+		tok += 2;
+		exp->u.assign.exp = parse_exp(&tok);
+	} else {
+		exp = parse_exp_1(&tok, 1);
+	}
+
+	*tok_ptr = tok;
+	return exp;
+}
+
+static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
+{
+	struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+	struct token *tok = *tok_ptr;
+
+	check_and_pop(&tok, TOK_INT_KW);
+	check_and_pop(&tok, TOK_IDENTIFIER);
+	decl->name = xstrdup((char *)tok[-1].value);
+	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT))
+		decl->value = parse_exp(&tok);
+
+	*tok_ptr = tok;
+	return decl;
 }
 
 static struct ast_statement *parse_statement(struct token **tok_ptr)
 {
-	struct ast_statement *st = xmalloc(sizeof(*st));
+	struct ast_statement *st = xcalloc(1, sizeof(*st));
 	struct token *tok = *tok_ptr;
 
-	check_and_pop(&tok, TOK_RETURN_KW);
-	st->type = AST_ST_RETURN;
-	st->u.ret_exp = parse_exp(&tok);
+	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
+		st->type = AST_ST_RETURN;
+		st->u.ret_exp = parse_exp(&tok);
+	} else if (tok->type == TOK_INT_KW) {
+		st->type = AST_ST_VAR_DECL;
+		st->u.decl = parse_var_decl(&tok);
+	} else {
+		/* must be an expression */
+		st->type = AST_ST_EXPRESSION;
+		st->u.exp = parse_exp(&tok);
+	}
+
 	check_and_pop(&tok, TOK_SEMICOLON);
 
 	*tok_ptr = tok;
@@ -278,7 +348,8 @@ static struct ast_statement *parse_statement(struct token **tok_ptr)
 
 static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 {
-	struct ast_func_decl *fun = xmalloc(sizeof(*fun));
+	struct ast_func_decl *fun = xcalloc(1, sizeof(*fun));
+	struct ast_statement **last_st = &(fun->body);
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INT_KW);
@@ -287,7 +358,10 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_OPEN_PAR);
 	check_and_pop(&tok, TOK_CLOSE_PAR);
 	check_and_pop(&tok, TOK_OPEN_BRACE);
-	fun->body = parse_statement(&tok);
+	while (!end_token(tok) && tok->type != TOK_CLOSE_BRACE) {
+		*last_st = parse_statement(&tok);
+		last_st = &((*last_st)->next);
+	}
 	check_and_pop(&tok, TOK_CLOSE_BRACE);
 
 	*tok_ptr = tok;
@@ -318,10 +392,25 @@ static void free_ast_expression(struct ast_expression *exp)
 		break;
 	case AST_EXP_CONSTANT_INT:
 		break;
+	case AST_EXP_ASSIGNMENT:
+		free(exp->u.assign.name);
+		free_ast_expression(exp->u.assign.exp);
+		break;
+	case AST_EXP_VAR:
+		free(exp->u.var_name);
+		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
 	}
 	free(exp);
+}
+
+static void free_ast_var_decl(struct ast_var_decl *decl)
+{
+	free(decl->name);
+	if (decl->value)
+		free_ast_expression(decl->value);
+	free(decl);
 }
 
 static void free_ast_statement(struct ast_statement *st)
@@ -329,25 +418,36 @@ static void free_ast_statement(struct ast_statement *st)
 	switch (st->type) {
 	case AST_ST_RETURN:
 		free_ast_expression(st->u.ret_exp);
-		free(st);
+		break;
+	case AST_ST_VAR_DECL:
+		free_ast_var_decl(st->u.decl);
+		break;
+	case AST_ST_EXPRESSION:
+		free_ast_expression(st->u.exp);
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
+	free(st);
 }
 
-static void free_ast_func_decl (struct ast_func_decl *fun)
+static void free_ast_func_decl(struct ast_func_decl *fun)
 {
-	free_ast_statement(fun->body);
+	struct ast_statement *st = fun->body;
+	while (st) {
+		struct ast_statement *next = st->next;
+		free_ast_statement(st);
+		st = next;
+	}
 	free(fun->name);
 	free(fun);
 }
 
 static void free_ast_program(struct ast_program *prog)
 {
+	free_ast_func_decl(prog->fun);
 	free(prog);
 }
-
 
 void free_ast(struct ast_program *prog)
 {
