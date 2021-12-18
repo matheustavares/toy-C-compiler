@@ -137,6 +137,7 @@ static inline int is_bin_op_tok(enum token_type tt)
 	case TOK_BITWISE_XOR:
 	case TOK_BITWISE_LEFT_SHIFT:
 	case TOK_BITWISE_RIGHT_SHIFT:
+	case TOK_ASSIGNMENT:
 		return 1;
 	default:
 		return 0;
@@ -164,6 +165,7 @@ static enum un_op_type tt2bin_op_type(enum token_type type)
 	case TOK_BITWISE_XOR: return EXP_OP_BITWISE_XOR;
 	case TOK_BITWISE_LEFT_SHIFT: return EXP_OP_BITWISE_LEFT_SHIFT;
 	case TOK_BITWISE_RIGHT_SHIFT: return EXP_OP_BITWISE_RIGHT_SHIFT;
+	case TOK_ASSIGNMENT: return EXP_OP_ASSIGNMENT;
 	default: die("BUG: unknown token type at tt2bin_op_type: %d", type);
 	}
 }
@@ -206,6 +208,9 @@ static int bin_op_precedence(enum bin_op_type type)
 	case EXP_OP_BITWISE_RIGHT_SHIFT:
 		return 11;
 
+	case EXP_OP_ASSIGNMENT:
+		return 2;
+
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
 }
@@ -238,6 +243,8 @@ static enum associativity bin_op_associativity(enum bin_op_type type)
 	case EXP_OP_BITWISE_LEFT_SHIFT:
 	case EXP_OP_BITWISE_RIGHT_SHIFT:
 		return ASSOC_LEFT;
+	case EXP_OP_ASSIGNMENT:
+		return ASSOC_RIGHT;
 	default: die("BUG: unknown type at bin_op_precedence: %d", type);
 	}
 }
@@ -254,6 +261,11 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 	while (is_bin_op_tok(tok->type)) {
 		enum bin_op_type bin_op_type = tt2bin_op_type(tok->type);
 		int prec = bin_op_precedence(bin_op_type);
+
+		if (bin_op_type == EXP_OP_ASSIGNMENT && exp->type != AST_EXP_VAR)
+			die("parser: assignment operator requires lvalue on left side.\n%s",
+			    show_token_on_source_line(tok));
+
 		if (prec < min_prec)
 			break;
 		tok++;
@@ -277,35 +289,7 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 
 static struct ast_expression *parse_exp(struct token **tok_ptr)
 {
-	struct token *tok = *tok_ptr;
-	struct ast_expression *exp;
-
-	/*
-	 * TODO: this is a bit weird. But the problem is that we cannot handle
-	 * assignment as the other binary operators because the left side cannot
-	 * be an expression. It must be a variable *only*. Note, for example,
-	 * that the following is invalid:
-	 *	return a = 2 || b = 3;
-	 * Because "= 3" requires the left side to be a variable. The above
-	 * would be evaluated as:
-	 *     return a = (2 || b) = 3;
-	 *
-	 * But maybe we can encode that in the binary expression code using
-	 * precedence ("=" has a very low precedence), and then checking that
-	 * the left side is a variable.
-	 */
-	if (tok->type == TOK_IDENTIFIER && (tok + 1)->type == TOK_ASSIGNMENT) {
-		exp = xmalloc(sizeof(*exp));
-		exp->type = AST_EXP_ASSIGNMENT;
-		exp->u.assign.name = xstrdup((char *)tok->value);
-		tok += 2;
-		exp->u.assign.exp = parse_exp(&tok);
-	} else {
-		exp = parse_exp_1(&tok, 1);
-	}
-
-	*tok_ptr = tok;
-	return exp;
+	return parse_exp_1(tok_ptr, 1);
 }
 
 static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
@@ -391,10 +375,6 @@ static void free_ast_expression(struct ast_expression *exp)
 		free_ast_expression(exp->u.un_op.exp);
 		break;
 	case AST_EXP_CONSTANT_INT:
-		break;
-	case AST_EXP_ASSIGNMENT:
-		free(exp->u.assign.name);
-		free_ast_expression(exp->u.assign.exp);
 		break;
 	case AST_EXP_VAR:
 		free(exp->u.var_name);

@@ -68,6 +68,8 @@ static const char *bin_op_as_str(enum bin_op_type type)
 	case EXP_OP_BITWISE_LEFT_SHIFT: return "<<";
 	case EXP_OP_BITWISE_RIGHT_SHIFT: return ">>";
 
+	case EXP_OP_ASSIGNMENT: return "Assignment";
+
 	default: die("BUG: unknown bin_op type %d", type);
 	}
 }
@@ -100,14 +102,6 @@ static void print_ast_expression(struct ast_expression *exp, struct label_list *
 	case AST_EXP_CONSTANT_INT:
 		node_id = add_label(labels, xmkstr("Constant int: '%d'", exp->u.ival));
 		print_arc_end(node_id);
-		break;
-	case AST_EXP_ASSIGNMENT:
-		node_id = add_label(labels, xmkstr("Assignment"));
-		print_arc_end(node_id);
-		print_arc_start(node_id);
-		print_arc_end(add_label(labels, xmkstr("Variable '%s'", exp->u.assign.name)));
-		print_arc_start(node_id);
-		print_ast_expression(exp->u.assign.exp, labels);
 		break;
 	case AST_EXP_VAR:
 		node_id = add_label(labels, xmkstr("Variable '%s'", exp->u.var_name));

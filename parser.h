@@ -31,7 +31,6 @@ struct ast_expression {
 		AST_EXP_CONSTANT_INT,
 		AST_EXP_UNARY_OP,
 		AST_EXP_BINARY_OP,
-		AST_EXP_ASSIGNMENT,
 		AST_EXP_VAR,
 	} type;
 
@@ -68,14 +67,19 @@ struct ast_expression {
 				EXP_OP_BITWISE_LEFT_SHIFT,
 				EXP_OP_BITWISE_RIGHT_SHIFT,
 
+				/*
+				 * Note: although this is listed as a binary
+				 * operator (and it indeed inceeds upon two
+				 * args), it is different than the other
+				 * operators in the sense that its left exp
+				 * MUST be of type AST_EXP_VAR. We don't
+				 * enforce this here, in the struct definition,
+				 * but we don in the parser.
+				 */
+				EXP_OP_ASSIGNMENT,
 			} type;
 			struct ast_expression *lexp, *rexp;
 		} bin_op;
-
-		struct {
-			char *name;
-			struct ast_expression *exp;
-		} assign;
 
 		char *var_name;
 	} u;
