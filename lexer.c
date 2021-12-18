@@ -257,7 +257,7 @@ struct token *lex(const char *str)
 			for (i = 0; str[i] && !char_in(str[i], WHITESPACE); i++)
 				;
 			die("lex error: unknown token '%s'\n%s", xstrndup(str, i),
-			    show_on_source_line(getline_dup(line_start),
+			    show_on_source_line(tab2sp(getline_dup(line_start), 1),
 						line_no, col_no));
 		}
 	}
