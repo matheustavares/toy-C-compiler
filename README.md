@@ -1,4 +1,4 @@
-# A [subset-of-] C compiler
+# A [subset-of-]C compiler
 
 Following the blogpost at:
 [https://norasandler.com/2017/11/29/Write-a-Compiler.html](https://norasandler.com/2017/11/29/Write-a-Compiler.html).
