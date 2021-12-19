@@ -377,7 +377,7 @@ static void free_ast_expression(struct ast_expression *exp)
 	case AST_EXP_CONSTANT_INT:
 		break;
 	case AST_EXP_VAR:
-		free(exp->u.var_name);
+		free((char *)exp->u.var_name);
 		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
@@ -387,7 +387,7 @@ static void free_ast_expression(struct ast_expression *exp)
 
 static void free_ast_var_decl(struct ast_var_decl *decl)
 {
-	free(decl->name);
+	free((char *)decl->name);
 	if (decl->value)
 		free_ast_expression(decl->value);
 	free(decl);
@@ -419,7 +419,7 @@ static void free_ast_func_decl(struct ast_func_decl *fun)
 		free_ast_statement(st);
 		st = next;
 	}
-	free(fun->name);
+	free((char *)fun->name);
 	free(fun);
 }
 
