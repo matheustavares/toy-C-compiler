@@ -14,10 +14,13 @@ $(OBJS_DIR)/%.o: %.c Makefile $(HEADERS)
 	@mkdir -p $(OBJS_DIR)
 	$(CC) $(CFLAGS) $< -c -o $@
 
-.PHONY: clean tags
+.PHONY: clean tags test
 clean:
 	rm -rf cc objs
 
 tags: $(SRCS) $(HEADERS)
 	rm -f $@
 	ctags -o $@ $(SRCS) $(HEADERS)
+
+test:
+	cd compiler-tests && ./test_compiler.sh ../cc $(STAGES)
