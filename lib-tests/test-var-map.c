@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "../util.h"
 #include "../lib/array.h"
-#include "../var-map.h"
+#include "../lib/var-map.h"
 
 int print_var_map_entry(const char *key, ssize_t val, void *_)
 {

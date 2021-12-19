@@ -1,8 +1,9 @@
 #define _GNU_SOURCE /* hsearch: *_r variants */ 
 #include <search.h>
 #include <assert.h>
-#include "util.h"
-#include "lib/array.h"
+#include "error.h"
+#include "wrappers.h"
+#include "array.h"
 #include "var-map.h"
 
 void var_map_init_size(struct var_map *map, size_t size)

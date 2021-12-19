@@ -13,7 +13,7 @@ $(MAIN): $(OBJS_DIR)/$(MAIN).o Makefile $(OBJS) $(HEADERS)
 	$(CC) $(CFLAGS) $(OBJS) $< -o $@
 
 $(OBJS_DIR)/%.o: %.c Makefile $(HEADERS)
-	@mkdir -p $(OBJS_DIR)
+	@mkdir -p $(OBJS_DIR)/lib
 	$(CC) $(CFLAGS) $< -c -o $@
 
 ###############################################################################
