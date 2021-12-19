@@ -34,20 +34,28 @@ $ ./cc -t file.c | dot -Tpng | display
 
 ## Testing
 
-To test, we use a fork of the test repo [provided by
-nlsandler](https://github.com/nlsandler/write_a_c_compiler). The fork
-is available at [here](https://github.com/matheustavares/c-compiler-tests).
-After cloning the submodule (and compiling the compiler), tests can be run
-with:
+There are two types of tests:
+
+- General end-to-end tests, which are available at the submodule
+  `compiler-tests`. This is [a
+  fork](https://github.com/matheustavares/c-compiler-tests) of the test repo
+  [provided by nlsandler](https://github.com/nlsandler/write_a_c_compiler).
+
+- Tests of specific lib routines and APIs, available at `lib-tests`.
+
+To run all tests, execute:
 
 ```shell
-$ make tests [STAGES="X Y ..."]
+$ make tests
 ```
 
-Use `STAGES=...` to run only the tests from a desired set of stages. (Available
-stage names are the subdirectories of compiler-tests, without the "stage-"
-prefix).
+Or select only one type:
 
-Note: the `compiler-tests/test_compiler.sh` script expects its caller to be
-inside `compiler-tests`. So either cd to the dir before running it or use the
-Makefile rule, which already takes care of that.
+```shell
+$ make compiler-tests [STAGES="X Y ..."]
+$ make lib-tests
+```
+
+Use `STAGES=...` to limit the compiler-tests to a desired set of stages. (See
+available stage names at the compiler-tests directory.) This can also be used
+with the "tests" make rule.
