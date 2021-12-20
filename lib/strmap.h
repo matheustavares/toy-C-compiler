@@ -11,7 +11,7 @@
  */
 
 struct hsearch_data;
-typedef void (*strmap_val_cpy_fn)(void **a, void **b);
+typedef void (*strmap_val_cpy_fn)(void **dst, void **src);
 
 struct strmap {
 	struct hsearch_data *table;

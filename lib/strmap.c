@@ -28,7 +28,7 @@ static void copy_hsearch_data(struct hsearch_data *src, struct hsearch_data *dst
 		search.key = (char *)keys[i];
 		if (!hsearch_r(search, FIND, &found, src))
 			die_errno("BUG: key '%s' should be in hsearch map but it is not", keys[i]);
-		cpy_fn(&found->data, &search.data);
+		cpy_fn(&search.data, &found->data);
 		if (!hsearch_r(search, ENTER, &found, dst))
 			die_errno("BUG: hsearch_r fail to enter key on copy_hsearch_data");
 	}

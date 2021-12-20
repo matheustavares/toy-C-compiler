@@ -13,9 +13,9 @@ static int print_strmap_entry(const char *key, void *val, void *_)
 	return 0;
 }
 
-static void strmap_addr_copy(void **ptr_a, void **ptr_b)
+static void strmap_addr_copy(void **ptr_dst, void **ptr_src)
 {
-	*ptr_b = *ptr_a;
+	*ptr_dst = *ptr_src;
 }
 
 int main(int argc, char **argv)
