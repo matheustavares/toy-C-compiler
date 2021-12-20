@@ -2,18 +2,26 @@
 #include <stdlib.h>
 #include "../util.h"
 #include "../lib/array.h"
-#include "../lib/var-map.h"
+#include "../lib/strmap.h"
 
-int print_var_map_entry(const char *key, ssize_t val, void *_)
+static int print_strmap_entry(const char *key, void *val, void *_)
 {
-	printf(" %s -> %zd\n", key, val);
+	int ival = (intmax_t)val;
+	printf(" %s -> %d\n", key, ival);
+	if (!strcmp(key, "break"))
+		return 1;
 	return 0;
+}
+
+static void strmap_addr_copy(void **ptr_a, void **ptr_b)
+{
+	*ptr_b = *ptr_a;
 }
 
 int main(int argc, char **argv)
 {
-	struct var_map vmap, vmap2;
-	struct var_map *map_ptr = &vmap, *other = &vmap2;
+	struct strmap map = { 0 }, map2 = { 0 };
+	struct strmap *map_ptr = &map, *other = &map2;
 	const char *val;
 
 	char **to_free = NULL;
@@ -33,43 +41,43 @@ int main(int argc, char **argv)
 			printf("    info\n");
 			return 0;
 		} else if (!strcmp(*argv, "init")) {
-			var_map_init(map_ptr);
+			strmap_init(map_ptr, strmap_addr_copy);
 			printf("init\n");
 		} else if (skip_prefix(*argv, "init=", &val)) {
-			var_map_init_size(map_ptr, atoi(val));
+			strmap_init_size(map_ptr, strmap_addr_copy, atoi(val));
 			printf("init %s\n", val);
 		} else if (!strcmp(*argv, "copy")) {
-			struct var_map *aux;
-			var_map_cpy(other, map_ptr);
-			var_map_destroy(map_ptr);
+			struct strmap *aux;
+			strmap_cpy(other, map_ptr);
+			strmap_destroy(map_ptr);
 			aux = map_ptr;
 			map_ptr = other;
 			other = aux;
 			printf("copy\n");
 		} else if (!strcmp(*argv, "destroy")) {
-			var_map_destroy(map_ptr);
+			strmap_destroy(map_ptr);
 			printf("destroy\n");
 		} else if (skip_prefix(*argv, "find=", &val)) {
-			printf("find '%s': %zd\n", val, var_map_find(map_ptr, val));
+			printf("find '%s': %d\n", val, (int)(intmax_t)strmap_find(map_ptr, val));
 		} else if (skip_prefix(*argv, "has=", &val)) {
-			printf("has '%s': %d\n", val, var_map_has(map_ptr, val));
+			printf("has '%s': %d\n", val, strmap_has(map_ptr, val));
 		} else if (skip_prefix(*argv, "put=", &val)) {
 			const char *comma;
-			int size;
+			int map_val;
 			for (comma = val; *comma && *comma != ','; comma++)
 				;
 			if (!*comma || !*(++comma))
 				die("unknown option '%s'", *argv);
-			size = atoi(comma);
+			map_val = atoi(comma);
 
 			ALLOC_GROW(to_free, nr + 1, alloc);
 			val = to_free[nr++] = xstrndup(val, comma - val - 1);
 
-			printf("put: '%s' -> %d\n", val, size);
-			var_map_put(map_ptr, val, size);
+			printf("put: '%s' -> %d\n", val, map_val);
+			strmap_put(map_ptr, val, (void *)(intmax_t)map_val);
 		} else if (!strcmp(*argv, "list")) {
 			printf("list\n");
-			var_map_iterate(map_ptr, print_var_map_entry, NULL);
+			strmap_iterate(map_ptr, print_strmap_entry, NULL);
 		} else if (!strcmp(*argv, "info")) {
 			printf("info:\n");
 			printf("  nr:          %zu\n", map_ptr->nr);

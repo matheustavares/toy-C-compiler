@@ -7,8 +7,8 @@ cleanup () {
 }
 trap cleanup EXIT
 
-test -x ./test-var-map || {
-	echo "./test-var-map is missing or not executable"
+test -x ./test-strmap || {
+	echo "./test-strmap is missing or not executable"
 	exit 1
 }
 
@@ -77,17 +77,47 @@ destroy
 EOF
 
 echo "TEST: many operations" &&
-./test-var-map init=2 has=a put=a,2 has=a find=a list put=a,3 find=a list info put=b,3 info put=c,4 info list copy list info copy list info destroy >$tmpdir/actual &&
-diff $tmpdir/expect $tmpdir/actual &&
+./test-strmap init=2 has=a put=a,2 has=a find=a list put=a,3 find=a list info put=b,3 info put=c,4 info list copy list info copy list info destroy >$tmpdir/actual
+if test $? != 0
+then
+	cat $tmpdir/actual
+	exit 1
+fi
+
+diff -u $tmpdir/expect $tmpdir/actual &&
 echo "OK" &&
 
 echo "TEST: invalid uses" &&
 for opt in has=a put=a,2 find=a list destroy "init init" copy
 do
-	./test-var-map $opt >$tmpdir/actual 2>&1
+	./test-strmap $opt >$tmpdir/actual 2>&1
 	{
 		test $? != 0 &&
 		test_grep BUG $tmpdir/actual
 	} || exit 1
 done &&
+echo "OK" &&
+
+cat >$tmpdir/expect <<-EOF &&
+init
+put: 'break' -> 2
+put: 'unreachable' -> 2
+has 'break': 1
+has 'unreachable': 1
+list
+ break -> 2
+destroy
+EOF
+
+echo "TEST: iterator break" &&
+./test-strmap init put=break,2 put=unreachable,2 has=break has=unreachable list destroy >$tmpdir/actual
+if test $? != 0
+then
+	cat $tmpdir/actual
+	exit 1
+fi
+
+diff -u $tmpdir/expect $tmpdir/actual &&
 echo "OK"
+
+
