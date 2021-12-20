@@ -47,15 +47,17 @@ void strmap_cpy(struct strmap *dst, struct strmap *src)
 		dst->keys[i] = src->keys[i];
 }
 
-void *strmap_find(struct strmap *map, const char *str)
+int strmap_find(struct strmap *map, const char *str, void **val)
 {
+	int ret;
 	ENTRY search, *found;
 	search.key = (char *)str;
 	if (!map->table)
 		die("BUG: strmap_find called with uninitialized map");
-	if (!hsearch_r(search, FIND, &found, map->table))
-		return NULL;
-	return found->data;
+	ret = hsearch_r(search, FIND, &found, map->table);
+	if (ret && val)
+		*val = found->data;
+	return ret;
 }
 
 void *strmap_put(struct strmap *map, const char *str, void *val)

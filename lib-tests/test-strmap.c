@@ -58,7 +58,11 @@ int main(int argc, char **argv)
 			strmap_destroy(map_ptr);
 			printf("destroy\n");
 		} else if (skip_prefix(*argv, "find=", &val)) {
-			printf("find '%s': %d\n", val, (int)(intmax_t)strmap_find(map_ptr, val));
+			void *vval;
+			if (strmap_find(map_ptr, val, &vval))
+				printf("find '%s': %d\n", val, (int)(intmax_t)vval);
+			else
+				printf("find '%s': not-found\n", val);
 		} else if (skip_prefix(*argv, "has=", &val)) {
 			printf("has '%s': %d\n", val, strmap_has(map_ptr, val));
 		} else if (skip_prefix(*argv, "put=", &val)) {

@@ -120,4 +120,25 @@ fi
 diff -u $tmpdir/expect $tmpdir/actual &&
 echo "OK"
 
+cat >$tmpdir/expect <<-EOF &&
+init
+has 'k': 0
+find 'k': not-found
+put: 'k' -> 0
+has 'k': 1
+find 'k': 0
+list
+ k -> 0
+destroy
+EOF
 
+echo "TEST: storing NULL" &&
+./test-strmap init has=k find=k put=k,0 has=k find=k list destroy >$tmpdir/actual
+if test $? != 0
+then
+	cat $tmpdir/actual
+	exit 1
+fi
+
+diff -u $tmpdir/expect $tmpdir/actual &&
+echo "OK"

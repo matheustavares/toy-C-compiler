@@ -29,10 +29,11 @@ void strmap_init_size(struct strmap *map, strmap_val_cpy_fn val_cpy_fn,
 void strmap_cpy(struct strmap *dst, struct strmap *src);
 void strmap_destroy(struct strmap *map);
 
-void *strmap_find(struct strmap *map, const char *str);
-static inline int strmap_has(struct strmap *map, const char *val)
+/* Returns 1 and saves value in val iff str is in map. */
+int strmap_find(struct strmap *map, const char *str, void **val);
+static inline int strmap_has(struct strmap *map, const char *key)
 {
-	return !!strmap_find(map, val);
+	return strmap_find(map, key, NULL);
 }
 
 /* Return the previous value or NULL. */
