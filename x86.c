@@ -230,13 +230,26 @@ static void generate_prog(struct ast_program *prog, FILE *file)
 	generate_func_decl(prog->fun, file);
 }
 
+static const char *x86_out_filename;
+static void x86_cleanup(void)
+{
+	if (x86_out_filename && unlink(x86_out_filename))
+		error_errno("failed to remove temporary asm file '%s'",
+			    x86_out_filename);
+}
+
 void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 {
 	FILE *file = fopen(out_filename, "w");
 	if (!file)
 		die_errno("failed to open out file '%s'", out_filename);
 
+	x86_out_filename = out_filename;
+	push_at_die(x86_cleanup);
+
 	generate_prog(prog, file);
+
+	pop_at_die();
 
 	if (fclose(file))
 		error_errno("failed to close '%s'", out_filename);
