@@ -3,35 +3,39 @@
 #include "parser.h"
 #include "util.h"
 
-#define xfprintf(file, ...) \
+struct x86_ctx {
+	FILE *out;
+};
+
+#define emit(ctx, ...) \
 	do { \
-		if (fprintf(file, __VA_ARGS__) < 0) \
+		if (fprintf((ctx)->out, __VA_ARGS__) < 0) \
 			die_errno("fprintf error"); \
 	} while (0)
 
-static void generate_expression(struct ast_expression *exp, FILE *file);
+static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx);
 
 static char *label_or_skip_2nd_clause(void)
 {
-	static unsigned long counter = 0; 
+	static unsigned long counter = 0;
 	return xmkstr("_or_skip_2nd_clause_%lu", counter++);
 }
 
-static void generate_logic_or(struct ast_expression *exp, FILE *file)
+static void generate_logic_or(struct ast_expression *exp, struct x86_ctx *ctx)
 {
 	assert(exp->type == AST_EXP_BINARY_OP &&
 	       exp->u.bin_op.type == EXP_OP_LOGIC_OR);
 
 	char *label_skip_2nd_clause = label_or_skip_2nd_clause();
 
-	generate_expression(exp->u.bin_op.lexp, file);
-	xfprintf(file, " cmp	$0, %%eax\n");
-	xfprintf(file, " jne	%s\n", label_skip_2nd_clause);
-	generate_expression(exp->u.bin_op.rexp, file);
-	xfprintf(file, " cmp	$0, %%eax\n");
-	xfprintf(file, "%s:\n", label_skip_2nd_clause);
-	xfprintf(file, " mov	$0, %%eax\n");
-	xfprintf(file, " setne	%%al\n");
+	generate_expression(exp->u.bin_op.lexp, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " jne	%s\n", label_skip_2nd_clause);
+	generate_expression(exp->u.bin_op.rexp, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, "%s:\n", label_skip_2nd_clause);
+	emit(ctx, " mov	$0, %%eax\n");
+	emit(ctx, " setne	%%al\n");
 	free(label_skip_2nd_clause);
 }
 
@@ -41,26 +45,26 @@ static char *label_and_skip_2nd_clause(void)
 	return xmkstr("_and_skip_2nd_clause_%lu", counter++);
 }
 
-static void generate_logic_and(struct ast_expression *exp, FILE *file)
+static void generate_logic_and(struct ast_expression *exp, struct x86_ctx *ctx)
 {
 	assert(exp->type == AST_EXP_BINARY_OP &&
 	       exp->u.bin_op.type == EXP_OP_LOGIC_AND);
 
 	char *label_skip_2nd_clause = label_and_skip_2nd_clause();
 
-	generate_expression(exp->u.bin_op.lexp, file);
-	xfprintf(file, " cmp	$0, %%eax\n");
-	xfprintf(file, " je	%s\n", label_skip_2nd_clause);
-	generate_expression(exp->u.bin_op.rexp, file);
-	xfprintf(file, " cmp	$0, %%eax\n");
-	xfprintf(file, "%s:\n", label_skip_2nd_clause);
-	xfprintf(file, " mov	$0, %%eax\n");
-	xfprintf(file, " setne	%%al\n");
+	generate_expression(exp->u.bin_op.lexp, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " je	%s\n", label_skip_2nd_clause);
+	generate_expression(exp->u.bin_op.rexp, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, "%s:\n", label_skip_2nd_clause);
+	emit(ctx, " mov	$0, %%eax\n");
+	emit(ctx, " setne	%%al\n");
 	free(label_skip_2nd_clause);
 }
 
 /* Convention: generate_expression should put the result in eax. */
-static void generate_expression(struct ast_expression *exp, FILE *file)
+static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 {
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
@@ -71,10 +75,10 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 		 * regarding the calculation (or not) of the right expresion.
 		 */
 		if (bin_op_type == EXP_OP_LOGIC_AND) {
-			generate_logic_and(exp, file);
+			generate_logic_and(exp, ctx);
 			return;
 		} else if (bin_op_type == EXP_OP_LOGIC_OR) {
-			generate_logic_or(exp, file);
+			generate_logic_or(exp, ctx);
 			return;
 		}
 
@@ -86,26 +90,26 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 		 * sub-expression is calculated, but it is easier to do it this
 		 * way.
 		 */
-		generate_expression(exp->u.bin_op.rexp, file);
+		generate_expression(exp->u.bin_op.rexp, ctx);
 		/*
 		 * Saving this in a register would be faster, but we don't know
 		 * how many sub-expressions there is and register allocation is
 		 * more complex than simplying pushing this value into the
 		 * stack.
 		 */
-		xfprintf(file, " push	%%rax\n");
-		generate_expression(exp->u.bin_op.lexp, file);
-		xfprintf(file, " pop	%%rcx\n");
+		emit(ctx, " push	%%rax\n");
+		generate_expression(exp->u.bin_op.lexp, ctx);
+		emit(ctx, " pop	%%rcx\n");
 
 		switch (bin_op_type) {
 		case EXP_OP_ADDITION:
-			xfprintf(file, " add	%%ecx, %%eax\n");
+			emit(ctx, " add	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_SUBTRACTION:
-			xfprintf(file, " sub	%%ecx, %%eax\n");
+			emit(ctx, " sub	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_MULTIPLICATION:
-			xfprintf(file, " imul	%%ecx, %%eax\n");
+			emit(ctx, " imul	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_DIVISION:
 			/*
@@ -118,60 +122,60 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 			 * eax is negative. So we use cdq, which does a sign
 			 * extension of eax into edx:eax.
 			 */
-			xfprintf(file, " cdq\n");
-			xfprintf(file, " idiv	%%ecx\n");
+			emit(ctx, " cdq\n");
+			emit(ctx, " idiv	%%ecx\n");
 			break;
 		case EXP_OP_MODULO:
-			xfprintf(file, " cdq\n");
-			xfprintf(file, " idiv	%%ecx\n");
+			emit(ctx, " cdq\n");
+			emit(ctx, " idiv	%%ecx\n");
 			/* idiv stores the remainder in edx. */
-			xfprintf(file, " mov	%%edx, %%eax\n");
+			emit(ctx, " mov	%%edx, %%eax\n");
 			break;
 		case EXP_OP_EQUAL:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " sete	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " sete	%%al\n");
 			break;
 		case EXP_OP_NOT_EQUAL:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " setne	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " setne	%%al\n");
 			break;
 		case EXP_OP_LT:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " setl	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " setl	%%al\n");
 			break;
 		case EXP_OP_LE:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " setle	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " setle	%%al\n");
 			break;
 		case EXP_OP_GT:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " setg	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " setg	%%al\n");
 			break;
 		case EXP_OP_GE:
-			xfprintf(file, " cmp	%%ecx, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " setge	%%al\n");
+			emit(ctx, " cmp	%%ecx, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " setge	%%al\n");
 			break;
 
 		case EXP_OP_BITWISE_AND:
-			xfprintf(file, " and	%%ecx, %%eax\n");
+			emit(ctx, " and	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_BITWISE_OR:
-			xfprintf(file, " or	%%ecx, %%eax\n");
+			emit(ctx, " or	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_BITWISE_XOR:
-			xfprintf(file, " xor	%%ecx, %%eax\n");
+			emit(ctx, " xor	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_BITWISE_LEFT_SHIFT:
-			xfprintf(file, " shl	%%ecx, %%eax\n");
+			emit(ctx, " shl	%%ecx, %%eax\n");
 			break;
 		case EXP_OP_BITWISE_RIGHT_SHIFT:
-			xfprintf(file, " shr	%%ecx, %%eax\n");
+			emit(ctx, " shr	%%ecx, %%eax\n");
 			break;
 
 		default:
@@ -180,54 +184,54 @@ static void generate_expression(struct ast_expression *exp, FILE *file)
 		break;
 
 	case AST_EXP_UNARY_OP:
-		generate_expression(exp->u.un_op.exp, file);
+		generate_expression(exp->u.un_op.exp, ctx);
 		switch (exp->u.un_op.type) {
 		case EXP_OP_NEGATION:
-			xfprintf(file, " neg	%%eax\n");
+			emit(ctx, " neg	%%eax\n");
 			break;
 		case EXP_OP_BIT_COMPLEMENT:
-			xfprintf(file, " not	%%eax\n");
+			emit(ctx, " not	%%eax\n");
 			break;
 		case EXP_OP_LOGIC_NEGATION:
-			xfprintf(file, " cmp	$0, %%eax\n");
-			xfprintf(file, " mov	$0, %%eax\n");
-			xfprintf(file, " sete	%%al\n");
+			emit(ctx, " cmp	$0, %%eax\n");
+			emit(ctx, " mov	$0, %%eax\n");
+			emit(ctx, " sete	%%al\n");
 			break;
 		default:
 			die("generate x86: unknown unary op: %d", exp->u.un_op.type);
 		}
 		break;
 	case AST_EXP_CONSTANT_INT:
-		xfprintf(file, " mov	$%d, %%eax\n", exp->u.ival);
+		emit(ctx, " mov	$%d, %%eax\n", exp->u.ival);
 		break;
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
 	}
 }
 
-static void generate_statement(struct ast_statement *st, FILE *file)
+static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
 	switch(st->type) {
 	case AST_ST_RETURN:
-		generate_expression(st->u.ret_exp, file);
+		generate_expression(st->u.ret_exp, ctx);
 		/* exp value is on eax, so just return it. */
-		xfprintf(file, " ret\n");
+		emit(ctx, " ret\n");
 		break;
 	default:
 		die("gerate x86: unknown statement type %d", st->type);
 	}
 }
 
-static void generate_func_decl(struct ast_func_decl *fun, FILE *file)
+static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
-	xfprintf(file, " .globl %s\n", fun->name);
-	xfprintf(file, "%s:\n", fun->name);
-	generate_statement(fun->body, file);
+	emit(ctx, " .globl %s\n", fun->name);
+	emit(ctx, "%s:\n", fun->name);
+	generate_statement(fun->body, ctx);
 }
 
-static void generate_prog(struct ast_program *prog, FILE *file)
+static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 {
-	generate_func_decl(prog->fun, file);
+	generate_func_decl(prog->fun, ctx);
 }
 
 static const char *x86_out_filename;
@@ -240,6 +244,7 @@ static void x86_cleanup(void)
 
 void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 {
+	struct x86_ctx ctx;
 	FILE *file = fopen(out_filename, "w");
 	if (!file)
 		die_errno("failed to open out file '%s'", out_filename);
@@ -247,7 +252,9 @@ void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 	x86_out_filename = out_filename;
 	push_at_die(x86_cleanup);
 
-	generate_prog(prog, file);
+	ctx.out = file;
+
+	generate_prog(prog, &ctx);
 
 	pop_at_die();
 
