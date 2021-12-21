@@ -99,10 +99,10 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 			generate_logic_or(exp, ctx);
 			return;
 		} else if (bin_op_type == EXP_OP_ASSIGNMENT) {
-			generate_expression(exp->u.bin_op.rexp, ctx);
 			struct ast_expression *lexp = exp->u.bin_op.lexp;
 			assert(lexp->type == AST_EXP_VAR);
 			size_t stack_index = symtable_var_ref(ctx->symtable, &lexp->u.var);
+			generate_expression(exp->u.bin_op.rexp, ctx);
 			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
 			return;
 		}
@@ -256,6 +256,13 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		break;
 	case AST_ST_VAR_DECL:
 		struct ast_var_decl *decl = st->u.decl;
+		/*
+		 * Put the varname on the symbol table before generating the
+		 * code for rexp due to the weird case of declaration with
+		 * assignment to itself:
+		 *		int v = v = 2;
+		 */
+		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index);
 		if (decl->value) {
 			generate_expression(decl->value, ctx);
 		} else {
@@ -267,7 +274,6 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		 * stack_index by 8) or eax (and increment by 4).
 		 */
 		emit(ctx, " push	%%rax\n");
-		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index);
 		ctx->stack_index += 8;
 		break;
 	case AST_ST_EXPRESSION:
