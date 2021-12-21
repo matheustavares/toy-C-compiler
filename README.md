@@ -1,6 +1,6 @@
 # A [subset-of-]C compiler
 
-Following the blogpost at:
+A toy compiler I'm writing following the excellent tutorial from Nora Sandler:
 [https://norasandler.com/2017/11/29/Write-a-Compiler.html](https://norasandler.com/2017/11/29/Write-a-Compiler.html).
 
 ## Clone and compile
@@ -25,7 +25,7 @@ $ ./cc -t file.c | dot -Tpng | display
 # ImageMagick (display) to show it.
 ```
 
-## Overfiew of the files
+## Overview of the files
 
 - lexer.c: the tokenizer
 - parser.c: a recursive descent parser
@@ -39,7 +39,7 @@ There are two types of tests:
 - General end-to-end tests, which are available at the submodule
   `compiler-tests`. This is [a
   fork](https://github.com/matheustavares/c-compiler-tests) of the test repo
-  [provided by nlsandler](https://github.com/nlsandler/write_a_c_compiler).
+  [provided by Nora](https://github.com/nlsandler/write_a_c_compiler).
 
 - Tests of specific lib routines and APIs, available at `lib-tests`.
 
