@@ -104,7 +104,7 @@ static void print_ast_expression(struct ast_expression *exp, struct label_list *
 		print_arc_end(node_id);
 		break;
 	case AST_EXP_VAR:
-		node_id = add_label(labels, xmkstr("Variable '%s'", exp->u.var_name));
+		node_id = add_label(labels, xmkstr("Variable '%s'", exp->u.var.name));
 		print_arc_end(node_id);
 		break;
 	default:
@@ -141,7 +141,7 @@ static void print_ast_statement(struct ast_statement *st, struct label_list *lab
 	}
 }
 
-static void print_ast_func_decl (struct ast_func_decl *fun, struct label_list *labels)
+static void print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
 	size_t node_id = add_label(labels, xmkstr("Function: %s", fun->name));
 	print_arc_end(node_id);

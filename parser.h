@@ -81,12 +81,16 @@ struct ast_expression {
 			struct ast_expression *lexp, *rexp;
 		} bin_op;
 
-		const char *var_name;
+		struct var_ref {
+			const char *name;
+			struct token *tok;
+		} var;
 	} u;
 };
 
 struct ast_var_decl {
 	const char *name;
+	struct token *tok;
 	struct ast_expression *value; /* optional */
 };
 

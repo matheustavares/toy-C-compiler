@@ -94,7 +94,8 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	} else if (tok[-1].type == TOK_IDENTIFIER) {
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_VAR;
-		exp->u.var_name = xstrdup((char *)tok[-1].value);
+		exp->u.var.name = xstrdup((char *)tok[-1].value);
+		exp->u.var.tok = &tok[-1];
 	} else if (tok[-1].type == TOK_PLUS) {
 		/* This unary operator does nothing, so we just remove it. */
 		exp = parse_exp_atom(&tok);
@@ -300,6 +301,7 @@ static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_INT_KW);
 	check_and_pop(&tok, TOK_IDENTIFIER);
 	decl->name = xstrdup((char *)tok[-1].value);
+	decl->tok = &tok[-1];
 	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT))
 		decl->value = parse_exp(&tok);
 
@@ -377,7 +379,7 @@ static void free_ast_expression(struct ast_expression *exp)
 	case AST_EXP_CONSTANT_INT:
 		break;
 	case AST_EXP_VAR:
-		free((char *)exp->u.var_name);
+		free((char *)exp->u.var.name);
 		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
