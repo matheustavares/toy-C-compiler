@@ -19,72 +19,64 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses
  *
- * These error routines were inspired / partially-coppied from the
- * homonymous usage.c routines from the Git project[1], at commit
+ * Some of these error routines were inspired / partially-coppied from
+ * the homonymous usage.c routines from the Git project[1], at commit
  * 88d915a634b44 ("A few fixes  before -rc2", 2021-11-04). The version
  * presented here was simplified as we don't need the more complex
  * mechanics and flexibility from the original ones.
  * [1]: https://github.com/git/git
  */
 
-#ifndef _ERROR_H
-#define _ERROR_H
+#include "error.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <string.h>
-#include <stdnoreturn.h>
+static at_die_fn at_die;
 
-static void inline _error_common_errno(const char *prefix, const char *fmt,
-			  va_list args, int errno_)
+static int die_is_recursing(void)
 {
-	fprintf(stderr, "%s: ", prefix);
-	vfprintf(stderr, fmt, args);
-	fprintf(stderr, ": %s\n", strerror(errno_));
+	static int dying;
+	return dying++;
 }
 
-static void inline _error_common(const char *prefix, const char *fmt,
-			  va_list args)
-{
-	fprintf(stderr, "%s: ", prefix);
-	vfprintf(stderr, fmt, args);
-	fprintf(stderr, "\n");
-}
-
-static int error_errno(char *fmt, ...)
+noreturn void die_errno(char *fmt, ...)
 {
 	va_list args;
+	if (die_is_recursing()) {
+		fputs("fatal: recursion detected in die handler\n", stderr);
+		exit(128);
+	}
 	va_start(args, fmt);
 	_error_common_errno("error", fmt, args, errno);
 	va_end(args);
-	return -1;
+	if (at_die)
+		at_die();
+	exit(128);
 }
 
-static int error(char *fmt, ...)
+noreturn void die(char *fmt, ...)
 {
 	va_list args;
+	if (die_is_recursing()) {
+		fputs("fatal: recursion detected in die handler\n", stderr);
+		exit(128);
+	}
 	va_start(args, fmt);
-	_error_common("error", fmt, args);
+	_error_common("fatal", fmt, args);
 	va_end(args);
-	return -1;
+	if (at_die)
+		at_die();
+	exit(128);
 }
 
-static void warning(char *fmt, ...)
+void push_at_die(at_die_fn fn)
 {
-	va_list args;
-	va_start(args, fmt);
-	_error_common("warning", fmt, args);
-	va_end(args);
+	if (at_die)
+		die("BUG: push_at_die currently can only hold one entry");
+	at_die = fn;
 }
 
-noreturn void die_errno(char *fmt, ...);
-noreturn void die(char *fmt, ...);
-
-typedef void (*at_die_fn)(void);
-
-void push_at_die(at_die_fn fn);
-void pop_at_die(void);
-
-#endif
+void pop_at_die(void)
+{
+	if (!at_die)
+		die("BUG: pop_at_die called with empty at_die stack");
+	at_die = NULL;
+}
