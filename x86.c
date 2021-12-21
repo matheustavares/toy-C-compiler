@@ -2,9 +2,27 @@
 #include <assert.h>
 #include "parser.h"
 #include "util.h"
+#include "symtable.h"
 
 struct x86_ctx {
 	FILE *out;
+	struct symtable *symtable;
+	/*
+	 * Local variables are stored in the stack with a position relative to
+	 * %rpb. The first available "spot" for a local variable in a function
+	 * is "%rpb - 8" because the stack frame is initialized with the
+	 * previous %rpb value (which occupies the first 8 bytes).
+	 *
+	 * The stack_index stores what is the next offset (relative to %rpb) to
+	 * store a local variable. Remember that the stack grows "down", so
+	 * even though we store unsigned size_t, the address should be
+	 * interpreted as "%rpb - stack_index";
+	 *
+	 * This is valid *only* valid inside function generation, and should be
+	 * 0 otherwise.
+	 */
+	size_t stack_index;
+	/* unsigned long scope; */
 };
 
 #define emit(ctx, ...) \
@@ -72,13 +90,20 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 
 		/*
 		 * We check these first because they have their own semantics
-		 * regarding the calculation (or not) of the right expresion.
+		 * regarding the calculation (or not) of the expresions.
 		 */
 		if (bin_op_type == EXP_OP_LOGIC_AND) {
 			generate_logic_and(exp, ctx);
 			return;
 		} else if (bin_op_type == EXP_OP_LOGIC_OR) {
 			generate_logic_or(exp, ctx);
+			return;
+		} else if (bin_op_type == EXP_OP_ASSIGNMENT) {
+			generate_expression(exp->u.bin_op.rexp, ctx);
+			struct ast_expression *lexp = exp->u.bin_op.lexp;
+			assert(lexp->type == AST_EXP_VAR);
+			size_t stack_index = symtable_var_ref(ctx->symtable, &lexp->u.var);
+			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
 			return;
 		}
 
@@ -204,9 +229,21 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 	case AST_EXP_CONSTANT_INT:
 		emit(ctx, " mov	$%d, %%eax\n", exp->u.ival);
 		break;
+	case AST_EXP_VAR:
+		size_t stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
+		emit(ctx, " mov	-%zu(%%rbp), %%rax\n", stack_index);
+		break;
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
 	}
+}
+
+static void generate_func_epilogue_and_ret(struct x86_ctx *ctx)
+{
+	/* epilogue: restore previous stack frame. */
+	emit(ctx, " mov	%%rbp, %%rsp\n");
+	emit(ctx, " pop	%%rbp\n");
+	emit(ctx, " ret\n");
 }
 
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
@@ -215,10 +252,29 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 	case AST_ST_RETURN:
 		generate_expression(st->u.ret_exp, ctx);
 		/* exp value is on eax, so just return it. */
-		emit(ctx, " ret\n");
+		generate_func_epilogue_and_ret(ctx);
+		break;
+	case AST_ST_VAR_DECL:
+		struct ast_var_decl *decl = st->u.decl;
+		if (decl->value) {
+			generate_expression(decl->value, ctx);
+		} else {
+			/* We don't really need to initialize it, but... */
+			emit(ctx, " mov	$0, %%eax\n");
+		}
+		/*
+		 * TODO: investigate if should push rax (and increment
+		 * stack_index by 8) or eax (and increment by 4).
+		 */
+		emit(ctx, " push	%%rax\n");
+		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index);
+		ctx->stack_index += 8;
+		break;
+	case AST_ST_EXPRESSION:
+		generate_expression(st->u.exp, ctx);
 		break;
 	default:
-		die("gerate x86: unknown statement type %d", st->type);
+		die("generate x86: unknown statement type %d", st->type);
 	}
 }
 
@@ -226,7 +282,29 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
-	generate_statement(fun->body, ctx);
+
+	/* prologue: save previous rbp and create an empty stack frame. */
+	emit(ctx, " push	%%rbp\n");
+	emit(ctx, " mov	%%rsp, %%rbp\n");
+	ctx->stack_index = 8; /* sizeof(%rbp) */
+
+	struct ast_statement *st, *last_st = NULL;;
+	for (st = fun->body; st; last_st = st, st = st->next)
+		generate_statement(st, ctx);
+
+	if (!last_st || last_st->type != AST_ST_RETURN) {
+		/*
+		 * If the function is missing a return statement, and it is
+		 * the main() function, it should return 0. If it is not
+		 * main(), the behavior is undefined. To keep uniformity, we
+		 * will return 0 in both cases. But let's warn the user.
+		 */
+		warning("function '%s' is missing a return statement. Will return 0.",
+			fun->name);
+		emit(ctx, " mov	$0, %%eax\n");
+		generate_func_epilogue_and_ret(ctx);
+	}
+	ctx->stack_index = 0;
 }
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
@@ -245,6 +323,7 @@ static void x86_cleanup(void)
 void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 {
 	struct x86_ctx ctx;
+	struct symtable symtable;
 	FILE *file = fopen(out_filename, "w");
 	if (!file)
 		die_errno("failed to open out file '%s'", out_filename);
@@ -252,7 +331,10 @@ void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 	x86_out_filename = out_filename;
 	push_at_die(x86_cleanup);
 
+	symtable_init(&symtable);
+	ctx.symtable = &symtable;
 	ctx.out = file;
+	ctx.stack_index = 0;
 
 	generate_prog(prog, &ctx);
 
@@ -260,4 +342,6 @@ void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 
 	if (fclose(file))
 		error_errno("failed to close '%s'", out_filename);
+
+	symtable_destroy(&symtable);
 }
