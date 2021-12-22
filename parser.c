@@ -145,7 +145,7 @@ static inline int is_bin_op_tok(enum token_type tt)
 	}
 }
 
-static enum un_op_type tt2bin_op_type(enum token_type type)
+static enum bin_op_type tt2bin_op_type(enum token_type type)
 {
 	switch (type) {
 	case TOK_MINUS: return EXP_OP_SUBTRACTION;
