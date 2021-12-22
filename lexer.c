@@ -87,6 +87,21 @@ const char *tt2str(enum token_type tt)
 	case TOK_LE: return "<=";
 	case TOK_GT: return ">";
 	case TOK_GE: return ">=";
+
+	case TOK_PLUS_ASSIGNMENT: return "+=";
+	case TOK_MINUS_ASSIGNMENT: return "-=";
+	case TOK_SLASH_ASSIGNMENT: return "/=";
+	case TOK_STAR_ASSIGNMENT: return "*=";
+	case TOK_MODULO_ASSIGNMENT: return "%=";
+	case TOK_BITWISE_AND_ASSIGNMENT: return "&=";
+	case TOK_BITWISE_OR_ASSIGNMENT: return "|=";
+	case TOK_BITWISE_XOR_ASSIGNMENT: return "^=";
+	case TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT: return "<<=";
+	case TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT: return ">>=";
+
+	case TOK_PLUS_PLUS: return "++";
+	case TOK_MINUS_MINUS: return "--";
+
 	default:
 		die("Unknown token type: %d\n", tt);
 	}
@@ -167,6 +182,56 @@ struct token *lex(const char *str)
 		} else if (*str == ';') {
 			add_token(TOK_SEMICOLON);
 
+		} else if (skip_prefix(str, "+=", &aux)) {
+			add_token(TOK_PLUS_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "-=", &aux)) {
+			add_token(TOK_MINUS_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "/=", &aux)) {
+			add_token(TOK_SLASH_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "*=", &aux)) {
+			add_token(TOK_STAR_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "%=", &aux)) {
+			add_token(TOK_MODULO_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "&=", &aux)) {
+			add_token(TOK_BITWISE_AND_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "|=", &aux)) {
+			add_token(TOK_BITWISE_OR_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "^=", &aux)) {
+			add_token(TOK_BITWISE_XOR_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "<<=", &aux)) {
+			add_token(TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, ">>=", &aux)) {
+			add_token(TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+
+		} else if (skip_prefix(str, "++", &aux)) {
+			add_token(TOK_PLUS_PLUS);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "--", &aux)) {
+			add_token(TOK_MINUS_MINUS);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+
 		} else if (*str == '-') {
 			add_token(TOK_MINUS);
 		} else if (*str == '~') {
@@ -216,7 +281,7 @@ struct token *lex(const char *str)
 			col_no += aux - 1 - str;
 			str = aux - 1;
 
-		/* These must come after ">*", "<*", and "=*" tokens. */
+		/* These must come after ">*", "<*", and "*=*" tokens. */
 		} else if (*str == '>') {
 			add_token(TOK_GT);
 		} else if (*str == '<') {
