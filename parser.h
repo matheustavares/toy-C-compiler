@@ -46,7 +46,7 @@ struct ast_expression {
 		} un_op;
 		struct {
 			enum bin_op_type {
-				EXP_OP_ADDITION,
+				EXP_OP_ADDITION = 0,
 				EXP_OP_SUBTRACTION,
 				EXP_OP_DIVISION,
 				EXP_OP_MULTIPLICATION,
@@ -77,6 +77,9 @@ struct ast_expression {
 				 * but we don in the parser.
 				 */
 				EXP_OP_ASSIGNMENT,
+
+				/* Keep at the end. */
+				EXP_BIN_OP_NR,
 			} type;
 			struct ast_expression *lexp, *rexp;
 		} bin_op;

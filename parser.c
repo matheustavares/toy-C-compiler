@@ -117,137 +117,95 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	return exp;
 }
 
+struct bin_op_info {
+	enum associativity { ASSOC_UNKNOWN=0, ASSOC_LEFT, ASSOC_RIGHT } assoc;
+	unsigned int precedence;
+};
+
+/*
+ * Source: https://en.cppreference.com/w/c/language/operator_precedence. But we
+ * invert the number sequence, so the lowest value has the highest precedence.
+ */
+static struct bin_op_info bin_op_info[] = {
+	[EXP_OP_ASSIGNMENT] =           { .assoc=ASSOC_RIGHT, .precedence=2 },
+	[EXP_OP_LOGIC_OR] =             { .assoc=ASSOC_LEFT,  .precedence=4 },
+	[EXP_OP_LOGIC_AND] =            { .assoc=ASSOC_LEFT,  .precedence=5 },
+	[EXP_OP_BITWISE_OR] =           { .assoc=ASSOC_LEFT,  .precedence=6 },
+	[EXP_OP_BITWISE_XOR] =          { .assoc=ASSOC_LEFT,  .precedence=7 },
+	[EXP_OP_BITWISE_AND] =          { .assoc=ASSOC_LEFT,  .precedence=8 },
+	[EXP_OP_EQUAL] =                { .assoc=ASSOC_LEFT,  .precedence=9 },
+	[EXP_OP_NOT_EQUAL] =            { .assoc=ASSOC_LEFT,  .precedence=9 },
+	[EXP_OP_LT] =                   { .assoc=ASSOC_LEFT,  .precedence=10 },
+	[EXP_OP_LE] =                   { .assoc=ASSOC_LEFT,  .precedence=10 },
+	[EXP_OP_GT] =                   { .assoc=ASSOC_LEFT,  .precedence=10 },
+	[EXP_OP_GE] =                   { .assoc=ASSOC_LEFT,  .precedence=10 },
+	[EXP_OP_BITWISE_LEFT_SHIFT] =   { .assoc=ASSOC_LEFT,  .precedence=11 },
+	[EXP_OP_BITWISE_RIGHT_SHIFT] =  { .assoc=ASSOC_LEFT,  .precedence=11 },
+	[EXP_OP_SUBTRACTION] =          { .assoc=ASSOC_LEFT,  .precedence=12 },
+	[EXP_OP_ADDITION] =             { .assoc=ASSOC_LEFT,  .precedence=12 },
+	[EXP_OP_MULTIPLICATION] =       { .assoc=ASSOC_LEFT,  .precedence=13 },
+	[EXP_OP_DIVISION] =             { .assoc=ASSOC_LEFT,  .precedence=13 },
+	[EXP_OP_MODULO] =               { .assoc=ASSOC_LEFT,  .precedence=13 },
+	[EXP_BIN_OP_NR] =               { 0 },
+};
+
+static int is_bin_op_tok_1(enum token_type type, enum bin_op_type *ret)
+{
+	switch (type) {
+	case TOK_MINUS:               *ret = EXP_OP_SUBTRACTION; return 1;
+	case TOK_PLUS:                *ret = EXP_OP_ADDITION; return 1;
+	case TOK_STAR:                *ret = EXP_OP_MULTIPLICATION; return 1;
+	case TOK_F_SLASH:             *ret = EXP_OP_DIVISION; return 1;
+	case TOK_MODULO:              *ret = EXP_OP_MODULO; return 1;
+	case TOK_LOGIC_AND:           *ret = EXP_OP_LOGIC_AND; return 1;
+	case TOK_LOGIC_OR:            *ret = EXP_OP_LOGIC_OR; return 1;
+	case TOK_EQUAL:               *ret = EXP_OP_EQUAL; return 1;
+	case TOK_NOT_EQUAL:           *ret = EXP_OP_NOT_EQUAL; return 1;
+	case TOK_LT:                  *ret = EXP_OP_LT; return 1;
+	case TOK_LE:                  *ret = EXP_OP_LE; return 1;
+	case TOK_GT:                  *ret = EXP_OP_GT; return 1;
+	case TOK_GE:                  *ret = EXP_OP_GE; return 1;
+	case TOK_BITWISE_AND:         *ret = EXP_OP_BITWISE_AND; return 1;
+	case TOK_BITWISE_OR:          *ret = EXP_OP_BITWISE_OR; return 1;
+	case TOK_BITWISE_XOR:         *ret = EXP_OP_BITWISE_XOR; return 1;
+	case TOK_BITWISE_LEFT_SHIFT:  *ret = EXP_OP_BITWISE_LEFT_SHIFT; return 1;
+	case TOK_BITWISE_RIGHT_SHIFT: *ret = EXP_OP_BITWISE_RIGHT_SHIFT; return 1;
+	case TOK_ASSIGNMENT:          *ret = EXP_OP_ASSIGNMENT; return 1;
+	default: return 0;
+	}
+}
+
 static inline int is_bin_op_tok(enum token_type tt)
 {
-	switch (tt) {
-	case TOK_PLUS:
-	case TOK_MINUS:
-	case TOK_STAR:
-	case TOK_F_SLASH:
-	case TOK_MODULO:
-	case TOK_LOGIC_AND:
-	case TOK_LOGIC_OR:
-	case TOK_EQUAL:
-	case TOK_NOT_EQUAL:
-	case TOK_LT:
-	case TOK_LE:
-	case TOK_GT:
-	case TOK_GE:
-	case TOK_BITWISE_AND:
-	case TOK_BITWISE_OR:
-	case TOK_BITWISE_XOR:
-	case TOK_BITWISE_LEFT_SHIFT:
-	case TOK_BITWISE_RIGHT_SHIFT:
-	case TOK_ASSIGNMENT:
-		return 1;
-	default:
-		return 0;
-	}
+	enum bin_op_type unused;
+	return is_bin_op_tok_1(tt, &unused);
 }
 
-static enum bin_op_type tt2bin_op_type(enum token_type type)
+static inline enum bin_op_type tt2bin_op_type(enum token_type tt)
 {
-	switch (type) {
-	case TOK_MINUS: return EXP_OP_SUBTRACTION;
-	case TOK_PLUS: return EXP_OP_ADDITION;
-	case TOK_STAR: return EXP_OP_MULTIPLICATION;
-	case TOK_F_SLASH: return EXP_OP_DIVISION;
-	case TOK_MODULO: return EXP_OP_MODULO;
-	case TOK_LOGIC_AND: return EXP_OP_LOGIC_AND;
-	case TOK_LOGIC_OR: return EXP_OP_LOGIC_OR;
-	case TOK_EQUAL: return EXP_OP_EQUAL;
-	case TOK_NOT_EQUAL: return EXP_OP_NOT_EQUAL;
-	case TOK_LT: return EXP_OP_LT;
-	case TOK_LE: return EXP_OP_LE;
-	case TOK_GT: return EXP_OP_GT;
-	case TOK_GE: return EXP_OP_GE;
-	case TOK_BITWISE_AND: return EXP_OP_BITWISE_AND;
-	case TOK_BITWISE_OR: return EXP_OP_BITWISE_OR;
-	case TOK_BITWISE_XOR: return EXP_OP_BITWISE_XOR;
-	case TOK_BITWISE_LEFT_SHIFT: return EXP_OP_BITWISE_LEFT_SHIFT;
-	case TOK_BITWISE_RIGHT_SHIFT: return EXP_OP_BITWISE_RIGHT_SHIFT;
-	case TOK_ASSIGNMENT: return EXP_OP_ASSIGNMENT;
-	default: die("BUG: unknown token type at tt2bin_op_type: %d", type);
-	}
+	enum bin_op_type bin_type;
+	if (!is_bin_op_tok_1(tt, &bin_type))
+		die("BUG: tt2bin_op_type called for token that is not"
+		    " a binary operation: %d\n", tt);
+	return bin_type;
 }
 
-static int bin_op_precedence(enum bin_op_type type)
+static unsigned int bin_op_precedence(enum bin_op_type type)
 {
-	/*
-	 * Source: https://en.cppreference.com/w/c/language/operator_precedence
-	 * But we invert the number sequence to have the highest value at the
-	 * highest precedence group.
-	 */
-	switch (type) {
-	case EXP_OP_SUBTRACTION:
-	case EXP_OP_ADDITION:
-		return 12;
-
-	case EXP_OP_MULTIPLICATION:
-	case EXP_OP_DIVISION:
-	case EXP_OP_MODULO:
-		return 13;
-
-	case EXP_OP_LOGIC_AND: return 5;
-	case EXP_OP_LOGIC_OR: return 4;
-
-	case EXP_OP_EQUAL:
-	case EXP_OP_NOT_EQUAL:
-		return 9;
-
-	case EXP_OP_LT:
-	case EXP_OP_LE:
-	case EXP_OP_GT:
-	case EXP_OP_GE:
-		return 10;
-
-	case EXP_OP_BITWISE_AND: return 8;
-	case EXP_OP_BITWISE_OR: return 6;
-	case EXP_OP_BITWISE_XOR: return 7;
-
-	case EXP_OP_BITWISE_LEFT_SHIFT:
-	case EXP_OP_BITWISE_RIGHT_SHIFT:
-		return 11;
-
-	case EXP_OP_ASSIGNMENT:
-		return 2;
-
-	default: die("BUG: unknown type at bin_op_precedence: %d", type);
-	}
+	assert(type >= 0 && type < EXP_BIN_OP_NR);
+	if (!bin_op_info[type].precedence)
+		die("BUG: we don't have precedence info for token %d\n"
+		    "Did you forget to update the bin_op_info array?", type);
+	return bin_op_info[type].precedence;
 }
 
-enum associativity { ASSOC_LEFT, ASSOC_RIGHT };
 static enum associativity bin_op_associativity(enum bin_op_type type)
 {
-	/*
-	 * TODO: we could replace this switch-case and the one above with a
-	 * static array, associating 'enum bin_op_type's to pairs of
-	 * associativity and precedence.
-	 */
-	switch (type) {
-	case EXP_OP_SUBTRACTION:
-	case EXP_OP_ADDITION:
-	case EXP_OP_MULTIPLICATION:
-	case EXP_OP_DIVISION:
-	case EXP_OP_MODULO:
-	case EXP_OP_LOGIC_AND:
-	case EXP_OP_LOGIC_OR:
-	case EXP_OP_EQUAL:
-	case EXP_OP_NOT_EQUAL:
-	case EXP_OP_LT:
-	case EXP_OP_LE:
-	case EXP_OP_GT:
-	case EXP_OP_GE:
-	case EXP_OP_BITWISE_AND:
-	case EXP_OP_BITWISE_OR:
-	case EXP_OP_BITWISE_XOR:
-	case EXP_OP_BITWISE_LEFT_SHIFT:
-	case EXP_OP_BITWISE_RIGHT_SHIFT:
-		return ASSOC_LEFT;
-	case EXP_OP_ASSIGNMENT:
-		return ASSOC_RIGHT;
-	default: die("BUG: unknown type at bin_op_precedence: %d", type);
-	}
+	assert(type >= 0 && type < EXP_BIN_OP_NR);
+	if (!bin_op_info[type].assoc)
+		die("BUG: we don't have associativity info for token %d\n"
+		    "Did you forget to update the bin_op_info array?", type);
+	return bin_op_info[type].assoc;
 }
 
 /* 
