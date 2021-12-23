@@ -170,8 +170,20 @@ static int is_bin_op_tok_1(enum token_type type, enum bin_op_type *ret)
 	case TOK_BITWISE_XOR:         *ret = EXP_OP_BITWISE_XOR; return 1;
 	case TOK_BITWISE_LEFT_SHIFT:  *ret = EXP_OP_BITWISE_LEFT_SHIFT; return 1;
 	case TOK_BITWISE_RIGHT_SHIFT: *ret = EXP_OP_BITWISE_RIGHT_SHIFT; return 1;
-	case TOK_ASSIGNMENT:          *ret = EXP_OP_ASSIGNMENT; return 1;
-	default: return 0;
+	case TOK_ASSIGNMENT:
+	case TOK_PLUS_ASSIGNMENT:
+	case TOK_MINUS_ASSIGNMENT:
+	case TOK_SLASH_ASSIGNMENT:
+	case TOK_STAR_ASSIGNMENT:
+	case TOK_MODULO_ASSIGNMENT:
+	case TOK_BITWISE_AND_ASSIGNMENT:
+	case TOK_BITWISE_OR_ASSIGNMENT:
+	case TOK_BITWISE_XOR_ASSIGNMENT:
+	case TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT:
+	case TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT:
+				      *ret = EXP_OP_ASSIGNMENT; return 1;
+	default:
+				      return 0;
 	}
 }
 
@@ -188,6 +200,34 @@ static inline enum bin_op_type tt2bin_op_type(enum token_type tt)
 		die("BUG: tt2bin_op_type called for token that is not"
 		    " a binary operation: %d\n", tt);
 	return bin_type;
+}
+
+static int is_compound_assign(enum token_type tt, enum bin_op_type *compound_op)
+{
+	switch (tt) {
+	case TOK_PLUS_ASSIGNMENT:
+		*compound_op = EXP_OP_ADDITION; return 1;
+	case TOK_MINUS_ASSIGNMENT:
+		*compound_op = EXP_OP_SUBTRACTION; return 1;
+	case TOK_SLASH_ASSIGNMENT:
+		*compound_op = EXP_OP_DIVISION; return 1;
+	case TOK_STAR_ASSIGNMENT:
+		*compound_op = EXP_OP_MULTIPLICATION; return 1;
+	case TOK_MODULO_ASSIGNMENT:
+		*compound_op = EXP_OP_MODULO; return 1;
+	case TOK_BITWISE_AND_ASSIGNMENT:
+		*compound_op = EXP_OP_BITWISE_AND; return 1;
+	case TOK_BITWISE_OR_ASSIGNMENT:
+		*compound_op = EXP_OP_BITWISE_OR; return 1;
+	case TOK_BITWISE_XOR_ASSIGNMENT:
+		*compound_op = EXP_OP_BITWISE_XOR; return 1;
+	case TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT:
+		*compound_op = EXP_OP_BITWISE_LEFT_SHIFT; return 1;
+	case TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT:
+		*compound_op = EXP_OP_BITWISE_RIGHT_SHIFT; return 1;
+	default:
+		return 0;
+	}
 }
 
 static unsigned int bin_op_precedence(enum bin_op_type type)
@@ -208,16 +248,27 @@ static enum associativity bin_op_associativity(enum bin_op_type type)
 	return bin_op_info[type].assoc;
 }
 
+struct ast_expression *ast_expression_var_dup(struct ast_expression *vexp)
+{
+	assert(vexp->type == AST_EXP_VAR);
+	struct ast_expression *cpy = xmalloc(sizeof(*cpy));
+	cpy->type = AST_EXP_VAR;
+	cpy->u.var.name = xstrdup(vexp->u.var.name);
+	cpy->u.var.tok = vexp->u.var.tok;
+	return cpy;
+}
+
 /* 
  * Parse expression using precedence climbing.
  * See: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing.
  */
 static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 {
-	struct token *tok = *tok_ptr;
+	struct token *op_tok, *tok = *tok_ptr;
 	struct ast_expression *exp = parse_exp_atom(&tok);
 
 	while (is_bin_op_tok(tok->type)) {
+		enum bin_op_type compound_op;
 		enum bin_op_type bin_op_type = tt2bin_op_type(tok->type);
 		int prec = bin_op_precedence(bin_op_type);
 
@@ -227,6 +278,7 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 
 		if (prec < min_prec)
 			break;
+		op_tok = tok;
 		tok++;
 
 		enum associativity assoc = bin_op_associativity(bin_op_type);
@@ -239,7 +291,18 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 		exp->type = AST_EXP_BINARY_OP;
 		exp->u.bin_op.type = bin_op_type;
 		exp->u.bin_op.lexp = lexp;
-		exp->u.bin_op.rexp = rexp;
+
+		if (is_compound_assign(op_tok->type, &compound_op)) {
+			struct ast_expression *compound_exp = xmalloc(sizeof(*compound_exp));
+			compound_exp->type = AST_EXP_BINARY_OP;
+			compound_exp->u.bin_op.type = compound_op;
+			compound_exp->u.bin_op.lexp = ast_expression_var_dup(lexp);
+			compound_exp->u.bin_op.rexp = rexp;
+
+			exp->u.bin_op.rexp = compound_exp;
+		} else {
+			exp->u.bin_op.rexp = rexp;
+		}
 	}
 
 	*tok_ptr = tok;
