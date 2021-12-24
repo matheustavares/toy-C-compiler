@@ -82,7 +82,8 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INTEGER, TOK_OPEN_PAR, TOK_MINUS, TOK_TILDE,
-		      TOK_LOGIC_NOT, TOK_PLUS, TOK_IDENTIFIER);
+		      TOK_LOGIC_NOT, TOK_PLUS, TOK_IDENTIFIER,
+		      TOK_PLUS_PLUS, TOK_MINUS_MINUS);
 
 	if (tok[-1].type == TOK_INTEGER) {
 		exp = xmalloc(sizeof(*exp));
@@ -99,6 +100,16 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	} else if (tok[-1].type == TOK_PLUS) {
 		/* This unary operator does nothing, so we just remove it. */
 		exp = parse_exp_atom(&tok);
+	} else if (tok[-1].type == TOK_PLUS_PLUS || tok[-1].type == TOK_MINUS_MINUS) {
+		struct token *op_tok = &tok[-1];
+		exp = xmalloc(sizeof(*exp));
+		exp->type = AST_EXP_UNARY_OP;
+		exp->u.un_op.exp = parse_exp(&tok);
+		if (exp->u.un_op.exp->type != AST_EXP_VAR)
+			die("parser: preffix inc/dec operators require an lvalue on the right.\n%s",
+			    show_token_on_source_line(op_tok));
+		exp->u.un_op.type = op_tok->type == TOK_PLUS_PLUS ?
+			EXP_OP_PREFIX_INC : EXP_OP_PREFIX_DEC;
 	} else {
 		/*
 		 * TODO: considering unary operators as part of the atom only
@@ -111,6 +122,21 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 		exp->type = AST_EXP_UNARY_OP;
 		exp->u.un_op.type = tt2un_op_type(tok[-1].type);
 		exp->u.un_op.exp = parse_exp_atom(&tok);
+	}
+
+	enum token_type suffix =
+		check_and_pop_gently(&tok, TOK_PLUS_PLUS, TOK_MINUS_MINUS);
+	if (suffix) {
+		struct token *op_tok = &tok[-1];
+		if (exp->type != AST_EXP_VAR)
+			die("parser: suffix inc/dec operators require an lvalue on the left.\n%s",
+			    show_token_on_source_line(op_tok));
+		struct ast_expression *suffix_exp = xmalloc(sizeof(*suffix_exp));
+		suffix_exp->type = AST_EXP_UNARY_OP;
+		suffix_exp->u.un_op.exp = exp;
+		suffix_exp->u.un_op.type = op_tok->type == TOK_PLUS_PLUS ?
+			EXP_OP_SUFFIX_INC : EXP_OP_SUFFIX_DEC;
+		exp = suffix_exp;
 	}
 
 	*tok_ptr = tok;

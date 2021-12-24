@@ -40,6 +40,10 @@ static const char *un_op_as_str(enum un_op_type type)
 	case EXP_OP_NEGATION: return "-";
 	case EXP_OP_BIT_COMPLEMENT: return "~";
 	case EXP_OP_LOGIC_NEGATION: return "!";
+	case EXP_OP_PREFIX_INC: return "prefix ++";
+	case EXP_OP_PREFIX_DEC: return "prefix --";
+	case EXP_OP_SUFFIX_INC: return "suffix ++";
+	case EXP_OP_SUFFIX_DEC: return "suffix --";
 	default: die("BUG: unknown un_op type %d", type);
 	}
 }

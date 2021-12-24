@@ -41,6 +41,10 @@ struct ast_expression {
 				EXP_OP_NEGATION,
 				EXP_OP_BIT_COMPLEMENT,
 				EXP_OP_LOGIC_NEGATION,
+				EXP_OP_PREFIX_INC,
+				EXP_OP_SUFFIX_INC,
+				EXP_OP_PREFIX_DEC,
+				EXP_OP_SUFFIX_DEC,
 			} type;
 			struct ast_expression *exp;
 		} un_op;
