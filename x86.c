@@ -209,7 +209,9 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		break;
 
 	case AST_EXP_UNARY_OP:
-		generate_expression(exp->u.un_op.exp, ctx);
+		size_t stack_index;
+		struct ast_expression *un_op_val = exp->u.un_op.exp;
+		generate_expression(un_op_val, ctx);
 		switch (exp->u.un_op.type) {
 		case EXP_OP_NEGATION:
 			emit(ctx, " neg	%%eax\n");
@@ -222,6 +224,28 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 			emit(ctx, " mov	$0, %%eax\n");
 			emit(ctx, " sete	%%al\n");
 			break;
+		case EXP_OP_PREFIX_INC:
+			assert(un_op_val->type == AST_EXP_VAR);
+			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " add	$1, %%eax\n");
+			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
+			break;
+		case EXP_OP_PREFIX_DEC:
+			assert(un_op_val->type == AST_EXP_VAR);
+			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " sub	$1, %%eax\n");
+			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
+			break;
+		case EXP_OP_SUFFIX_INC:
+			assert(un_op_val->type == AST_EXP_VAR);
+			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " add	$1, -%zu(%%rbp)\n", stack_index);
+			break;
+		case EXP_OP_SUFFIX_DEC:
+			assert(un_op_val->type == AST_EXP_VAR);
+			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " sub	$1, -%zu(%%rbp)\n", stack_index);
+			break;
 		default:
 			die("generate x86: unknown unary op: %d", exp->u.un_op.type);
 		}
@@ -230,7 +254,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		emit(ctx, " mov	$%d, %%eax\n", exp->u.ival);
 		break;
 	case AST_EXP_VAR:
-		size_t stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
+		stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
 		emit(ctx, " mov	-%zu(%%rbp), %%rax\n", stack_index);
 		break;
 	default:
