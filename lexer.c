@@ -58,9 +58,13 @@ const char *tt2str(enum token_type tt)
 	case TOK_OPEN_PAR: return "(";
 	case TOK_CLOSE_PAR: return ")";
 	case TOK_SEMICOLON: return ";";
+	case TOK_COLON: return ":";
+	case TOK_QUESTION_MARK: return "?";
 
 	case TOK_INT_KW: return "<int> keyword";
 	case TOK_RETURN_KW: return "<return> keyword";
+	case TOK_IF_KW: return "<if> keyword";
+	case TOK_ELSE_KW: return "<else> keyword";
 
 	case TOK_IDENTIFIER: return "<identifier>";
 	case TOK_INTEGER: return "<integer>";
@@ -181,6 +185,10 @@ struct token *lex(const char *str)
 			add_token(TOK_CLOSE_PAR);
 		} else if (*str == ';') {
 			add_token(TOK_SEMICOLON);
+		} else if (*str == ':') {
+			add_token(TOK_COLON);
+		} else if (*str == '?') {
+			add_token(TOK_QUESTION_MARK);
 
 		} else if (skip_prefix(str, "+=", &aux)) {
 			add_token(TOK_PLUS_ASSIGNMENT);
@@ -304,6 +312,14 @@ struct token *lex(const char *str)
 			str = aux - 1;
 		} else if (skip_prefix(str, "return", &aux) && !char_in(*aux, ALPHA_NUM)) {
 			add_token(TOK_RETURN_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "if", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_IF_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "else", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_ELSE_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
 		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
