@@ -135,6 +135,17 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 	case AST_ST_EXPRESSION:
 		node = print_ast_expression(st->u.exp, labels);
 		break;
+	case AST_ST_IF_ELSE:
+		node = add_label(labels, xstrdup("if"));
+		next_node = print_ast_expression(st->u.if_else.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		next_node = print_ast_statement(st->u.if_else.if_st, labels);
+		print_arc_label(node, next_node, "then");
+		if (st->u.if_else.else_st) {
+			next_node = print_ast_statement(st->u.if_else.else_st, labels);
+			print_arc_label(node, next_node, "else");
+		}
+		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}

@@ -106,6 +106,7 @@ struct ast_statement {
 		AST_ST_RETURN,
 		AST_ST_VAR_DECL,
 		AST_ST_EXPRESSION,
+		AST_ST_IF_ELSE,
 	} type;
 
 	union {
@@ -113,6 +114,10 @@ struct ast_statement {
 		struct ast_expression *ret_exp;
 		struct ast_expression *exp;
 		struct ast_var_decl *decl;
+		struct {
+			struct ast_expression *condition;
+			struct ast_statement *if_st, *else_st; /* else is optional */
+		} if_else;
 	} u;
 
 	struct ast_statement *next;

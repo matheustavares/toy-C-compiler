@@ -364,16 +364,25 @@ static struct ast_statement *parse_statement(struct token **tok_ptr)
 	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
 		st->type = AST_ST_RETURN;
 		st->u.ret_exp = parse_exp(&tok);
+		check_and_pop(&tok, TOK_SEMICOLON);
+	} else if (check_and_pop_gently(&tok, TOK_IF_KW)) {
+		st->type = AST_ST_IF_ELSE;
+		check_and_pop(&tok, TOK_OPEN_PAR);
+		st->u.if_else.condition = parse_exp(&tok);
+		check_and_pop(&tok, TOK_CLOSE_PAR);
+		st->u.if_else.if_st = parse_statement(&tok);
+		if (check_and_pop_gently(&tok, TOK_ELSE_KW))
+			st->u.if_else.else_st = parse_statement(&tok);
 	} else if (tok->type == TOK_INT_KW) {
 		st->type = AST_ST_VAR_DECL;
 		st->u.decl = parse_var_decl(&tok);
+		check_and_pop(&tok, TOK_SEMICOLON);
 	} else {
 		/* must be an expression */
 		st->type = AST_ST_EXPRESSION;
 		st->u.exp = parse_exp(&tok);
+		check_and_pop(&tok, TOK_SEMICOLON);
 	}
-
-	check_and_pop(&tok, TOK_SEMICOLON);
 
 	*tok_ptr = tok;
 	return st;
@@ -453,6 +462,12 @@ static void free_ast_statement(struct ast_statement *st)
 		break;
 	case AST_ST_EXPRESSION:
 		free_ast_expression(st->u.exp);
+		break;
+	case AST_ST_IF_ELSE:
+		free_ast_expression(st->u.if_else.condition);
+		free_ast_statement(st->u.if_else.if_st);
+		if (st->u.if_else.else_st)
+			free_ast_statement(st->u.if_else.else_st);
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
