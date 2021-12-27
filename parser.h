@@ -32,6 +32,7 @@ struct ast_expression {
 		AST_EXP_UNARY_OP,
 		AST_EXP_BINARY_OP,
 		AST_EXP_VAR,
+		AST_EXP_TERNARY,
 	} type;
 
 	union {
@@ -92,6 +93,12 @@ struct ast_expression {
 			const char *name;
 			struct token *tok;
 		} var;
+
+		struct {
+			struct ast_expression *condition,
+					      *if_exp,
+					      *else_exp;
+		} ternary;
 	} u;
 };
 

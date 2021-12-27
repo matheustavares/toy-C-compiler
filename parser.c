@@ -284,6 +284,8 @@ struct ast_expression *ast_expression_var_dup(struct ast_expression *vexp)
 	return cpy;
 }
 
+#define is_ternary_op_tok(tt) ((tt) == TOK_QUESTION_MARK)
+
 /* 
  * Parse expression using precedence climbing.
  * See: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing.
@@ -293,7 +295,28 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 	struct token *op_tok, *tok = *tok_ptr;
 	struct ast_expression *exp = parse_exp_atom(&tok);
 
-	while (is_bin_op_tok(tok->type)) {
+	while (is_bin_op_tok(tok->type) || is_ternary_op_tok(tok->type)) {
+
+		if (is_ternary_op_tok(tok->type)) {
+			const int ternary_prec = 3;
+			const enum associativity ternary_assoc = ASSOC_RIGHT;
+
+			if (ternary_prec < min_prec)
+				break;
+			tok++;
+
+			struct ast_expression *condition = exp;
+			exp = xmalloc(sizeof(*exp));
+			exp->type = AST_EXP_TERNARY;
+			exp->u.ternary.condition = condition;
+			exp->u.ternary.if_exp = parse_exp(&tok);
+			check_and_pop(&tok, TOK_COLON);
+			exp->u.ternary.else_exp = parse_exp_1(&tok,
+					ternary_assoc == ASSOC_LEFT ?
+					ternary_prec + 1 : ternary_prec);
+			continue;
+		}
+
 		enum bin_op_type compound_op;
 		enum bin_op_type bin_op_type = tt2bin_op_type(tok->type);
 		int prec = bin_op_precedence(bin_op_type);
@@ -440,6 +463,11 @@ static void free_ast_expression(struct ast_expression *exp)
 	case AST_EXP_BINARY_OP:
 		free_ast_expression(exp->u.bin_op.lexp);
 		free_ast_expression(exp->u.bin_op.rexp);
+		break;
+	case AST_EXP_TERNARY:
+		free_ast_expression(exp->u.ternary.condition);
+		free_ast_expression(exp->u.ternary.if_exp);
+		free_ast_expression(exp->u.ternary.else_exp);
 		break;
 	case AST_EXP_UNARY_OP:
 		free_ast_expression(exp->u.un_op.exp);

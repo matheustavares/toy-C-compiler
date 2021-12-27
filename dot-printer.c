@@ -97,6 +97,15 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 		next_node = print_ast_expression(exp->u.bin_op.rexp, labels);
 		print_arc(node, next_node);
 		break;
+	case AST_EXP_TERNARY:
+		node = add_label(labels, xstrdup("Ternary op (?:)"));
+		next_node = print_ast_expression(exp->u.ternary.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		next_node = print_ast_expression(exp->u.ternary.if_exp, labels);
+		print_arc_label(node, next_node, "then");
+		next_node = print_ast_expression(exp->u.ternary.else_exp, labels);
+		print_arc_label(node, next_node, "else");
+		break;
 	case AST_EXP_UNARY_OP:
 		type_str = un_op_as_str(exp->u.un_op.type);
 		node = add_label(labels, xmkstr("Unary op: '%s'", type_str));
