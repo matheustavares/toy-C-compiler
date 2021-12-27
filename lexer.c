@@ -3,7 +3,7 @@
 #include "lexer.h"
 
 #define ALPHA "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-#define NUM "012345689"
+#define NUM "0123456789"
 #define WHITESPACE " \t\n"
 #define ALPHA_NUM (ALPHA NUM)
 
