@@ -356,7 +356,8 @@ static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
 	return decl;
 }
 
-static struct ast_statement *parse_statement(struct token **tok_ptr)
+static struct ast_statement *parse_statement_1(struct token **tok_ptr,
+					       int allow_declaration)
 {
 	struct ast_statement *st = xcalloc(1, sizeof(*st));
 	struct token *tok = *tok_ptr;
@@ -370,10 +371,16 @@ static struct ast_statement *parse_statement(struct token **tok_ptr)
 		check_and_pop(&tok, TOK_OPEN_PAR);
 		st->u.if_else.condition = parse_exp(&tok);
 		check_and_pop(&tok, TOK_CLOSE_PAR);
-		st->u.if_else.if_st = parse_statement(&tok);
+		/*
+		 * NEEDSWORK: hacky, should probably introduce the
+		 * struct ast_block_item type, which can be either a statement
+		 * or a variable declaration, and leave declaration outside
+		 * of the struct ast_statement definition.
+		 */
+		st->u.if_else.if_st = parse_statement_1(&tok, 0);
 		if (check_and_pop_gently(&tok, TOK_ELSE_KW))
-			st->u.if_else.else_st = parse_statement(&tok);
-	} else if (tok->type == TOK_INT_KW) {
+			st->u.if_else.else_st = parse_statement_1(&tok, 0);
+	} else if (allow_declaration && tok->type == TOK_INT_KW) {
 		st->type = AST_ST_VAR_DECL;
 		st->u.decl = parse_var_decl(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
@@ -386,6 +393,11 @@ static struct ast_statement *parse_statement(struct token **tok_ptr)
 
 	*tok_ptr = tok;
 	return st;
+}
+
+static struct ast_statement *parse_statement(struct token **tok_ptr)
+{
+	return parse_statement_1(tok_ptr, 1);
 }
 
 static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)

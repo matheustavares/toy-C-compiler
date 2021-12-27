@@ -104,6 +104,10 @@ struct ast_var_decl {
 struct ast_statement {
 	enum {
 		AST_ST_RETURN,
+		/*
+		 * TODO: this should probably not be at ast_statement. See
+		 * parser.c:parse_statement_1() for more info.
+		 */
 		AST_ST_VAR_DECL,
 		AST_ST_EXPRESSION,
 		AST_ST_IF_ELSE,
