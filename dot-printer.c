@@ -78,88 +78,84 @@ static const char *bin_op_as_str(enum bin_op_type type)
 	}
 }
 
-#define print_arc_start(id) printf(" %zu -> ", id)
-#define print_arc_end(id) printf("%zu;\n", id)
+/* TODO: would love to unify these two. */
+#define print_arc(from, to) printf(" %zu -> %zu;\n", from, to)
+#define print_arc_label(from, to, label) \
+	printf(" %zu -> %zu [label=\"%s\"];\n", from, to, label)
 
-static void print_ast_expression(struct ast_expression *exp, struct label_list *labels)
+static size_t print_ast_expression(struct ast_expression *exp, struct label_list *labels)
 {
 	const char *type_str;
-	size_t node_id;
+	size_t node, next_node;
 
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
 		type_str = bin_op_as_str(exp->u.bin_op.type);
-		node_id = add_label(labels, xmkstr("Binary op: '%s'", type_str));
-		print_arc_end(node_id);
-		print_arc_start(node_id);
-		print_ast_expression(exp->u.bin_op.lexp, labels);
-		print_arc_start(node_id);
-		print_ast_expression(exp->u.bin_op.rexp, labels);
+		node = add_label(labels, xmkstr("Binary op: '%s'", type_str));
+		next_node = print_ast_expression(exp->u.bin_op.lexp, labels);
+		print_arc(node, next_node);
+		next_node = print_ast_expression(exp->u.bin_op.rexp, labels);
+		print_arc(node, next_node);
 		break;
 	case AST_EXP_UNARY_OP:
 		type_str = un_op_as_str(exp->u.un_op.type);
-		node_id = add_label(labels, xmkstr("Unary op: '%s'", type_str));
-		print_arc_end(node_id);
-		print_arc_start(node_id);
-		print_ast_expression(exp->u.un_op.exp, labels);
+		node = add_label(labels, xmkstr("Unary op: '%s'", type_str));
+		next_node = print_ast_expression(exp->u.un_op.exp, labels);
+		print_arc(node, next_node);
 		break;
 	case AST_EXP_CONSTANT_INT:
-		node_id = add_label(labels, xmkstr("Constant int: '%d'", exp->u.ival));
-		print_arc_end(node_id);
+		node = add_label(labels, xmkstr("Constant int: '%d'", exp->u.ival));
 		break;
 	case AST_EXP_VAR:
-		node_id = add_label(labels, xmkstr("Variable '%s'", exp->u.var.name));
-		print_arc_end(node_id);
+		node = add_label(labels, xmkstr("Variable '%s'", exp->u.var.name));
 		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
 	}
+
+	return node;
 }
 
-static void print_ast_statement(struct ast_statement *st, struct label_list *labels)
+static size_t print_ast_statement(struct ast_statement *st, struct label_list *labels)
 {
-	size_t node_id;
+	size_t node, next_node;
 	switch (st->type) {
 	case AST_ST_RETURN:
-		node_id = add_label(labels, xstrdup("Return"));
-		print_arc_end(node_id);
-		print_arc_start(node_id);
-		print_ast_expression(st->u.ret_exp, labels);
+		node = add_label(labels, xstrdup("Return"));
+		next_node = print_ast_expression(st->u.ret_exp, labels);
+		print_arc(node, next_node);
 		break;
 	case AST_ST_VAR_DECL:
-		node_id = add_label(labels, xmkstr("Declare variable '%s'", st->u.decl->name));
-		print_arc_end(node_id);
+		node = add_label(labels, xmkstr("Declare variable '%s'", st->u.decl->name));
 		if (st->u.decl->value) {
-			print_arc_start(node_id);
-			node_id = add_label(labels, xmkstr("with value"));
-			print_arc_end(node_id);
-			print_arc_start(node_id);
-			print_ast_expression(st->u.decl->value, labels);
+			next_node = print_ast_expression(st->u.decl->value, labels);
+			print_arc_label(node, next_node, "with\nvalue");
 		}
 		break;
 	case AST_ST_EXPRESSION:
-		print_ast_expression(st->u.exp, labels);
+		node = print_ast_expression(st->u.exp, labels);
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
+	return node;
 }
 
-static void print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
+static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
-	size_t node_id = add_label(labels, xmkstr("Function: %s", fun->name));
-	print_arc_end(node_id);
+	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
 	for (struct ast_statement *st = fun->body; st; st = st->next) {
-		print_arc_start(node_id);
-		print_ast_statement(st, labels);
+		size_t next_node = print_ast_statement(st, labels);
+		print_arc(node, next_node);
 	}
+	return node;
 }
 
 static void print_ast_program(struct ast_program *prog, struct label_list *labels)
 {
-	size_t node_id = add_label(labels, xstrdup("Program"));
-	print_arc_start(node_id);
-	print_ast_func_decl(prog->fun, labels);
+	size_t node = add_label(labels, xstrdup("Program"));
+	size_t next_node = print_ast_func_decl(prog->fun, labels);
+	print_arc(node, next_node);
 }
 
 void print_ast_in_dot(struct ast_program *prog)
