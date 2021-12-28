@@ -82,3 +82,12 @@ size_t symtable_var_ref(struct symtable *tab, struct var_ref *v)
 		    show_token_on_source_line(v->tok));
 	return sdata->u.stack_index;
 }
+
+size_t symtable_bytes_in_scope(struct symtable *tab, unsigned int scope)
+{
+	size_t ret = 0;
+	for (size_t i = 0; i < tab->nr; i++)
+		if (tab->data[i].scope == scope)
+			ret += 8; /* for now, all variables on the stack have size 8. */
+	return ret;
+}

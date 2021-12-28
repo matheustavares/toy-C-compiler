@@ -348,6 +348,7 @@ static void generate_statement_block(struct ast_statement *st, struct x86_ctx *c
 {
 	struct symtable *cpy, *saved_symtable;
 	unsigned int saved_scope = ctx->scope++;
+	size_t saved_stack_index = ctx->stack_index;
 
 	cpy = xmalloc(sizeof(*cpy));
 	symtable_cpy(cpy, ctx->symtable);
@@ -358,8 +359,16 @@ static void generate_statement_block(struct ast_statement *st, struct x86_ctx *c
 	for (size_t i = 0; i < st->u.block.nr; i++)
 		generate_statement(st->u.block.items[i], ctx);
 
+	/* 
+	 * Deallocate block variables. Alternatively, we could do:  
+	 * rsp = rbp - (saved_stack_index  + 8);
+	 */
+	emit(ctx, " add $%zu, %%rsp\n",
+		symtable_bytes_in_scope(ctx->symtable, ctx->scope));
+
 	ctx->scope = saved_scope;
 	ctx->symtable = saved_symtable;
+	ctx->stack_index = saved_stack_index;
 	symtable_destroy(cpy);
 	free(cpy);
 }

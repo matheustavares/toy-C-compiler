@@ -38,4 +38,11 @@ void symtable_put_lvar(struct symtable *tab, struct ast_var_decl *decl,
 		       size_t stack_index, unsigned int scope);
 size_t symtable_var_ref(struct symtable *tab, struct var_ref *v);
 
+/* 
+ * How many bytes were allocated at a given scope. Note that due to variable
+ * shadowing, the return value is only guaranteed to be accurated when `scope`
+ * is the current scope (i.e. scope >= max{tab.data[*].scope}).
+ */
+size_t symtable_bytes_in_scope(struct symtable *tab, unsigned int scope);
+
 #endif
