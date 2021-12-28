@@ -125,7 +125,7 @@ struct ast_statement {
 		struct ast_expression *ret_exp;
 		struct ast_expression *exp;
 		struct ast_var_decl *decl;
-		struct {
+		struct if_else {
 			struct ast_expression *condition;
 			struct ast_statement *if_st, *else_st; /* else is optional */
 		} if_else;

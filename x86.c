@@ -32,6 +32,7 @@ struct x86_ctx {
 	} while (0)
 
 static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx);
+static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx);
 
 static char *label_or_skip_2nd_clause(void)
 {
@@ -79,6 +80,37 @@ static void generate_logic_and(struct ast_expression *exp, struct x86_ctx *ctx)
 	emit(ctx, " mov	$0, %%eax\n");
 	emit(ctx, " setne	%%al\n");
 	free(label_skip_2nd_clause);
+}
+
+static char *label_ternary_else(void)
+{
+	static unsigned long counter = 0;
+	return xmkstr("_ternary_else_%lu", counter++);
+}
+
+static char *label_ternary_end(void)
+{
+	static unsigned long counter = 0;
+	return xmkstr("_ternary_end_%lu", counter++);
+}
+
+static void generate_ternary(struct ast_expression *exp, struct x86_ctx *ctx)
+{
+	assert(exp->type == AST_EXP_TERNARY);
+	char *label_else = label_ternary_else();
+	char *label_end = label_ternary_end();
+
+	generate_expression(exp->u.ternary.condition, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " je	%s\n", label_else);
+	generate_expression(exp->u.ternary.if_exp, ctx);
+	emit(ctx, " jmp %s\n", label_end);
+	emit(ctx, "%s:\n", label_else);
+	generate_expression(exp->u.ternary.else_exp, ctx);
+	emit(ctx, "%s:\n", label_end);
+
+	free(label_else);
+	free(label_end);
 }
 
 /* Convention: generate_expression should put the result in eax. */
@@ -208,6 +240,10 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		}
 		break;
 
+	case AST_EXP_TERNARY:
+		generate_ternary(exp, ctx);
+		break;
+
 	case AST_EXP_UNARY_OP:
 		size_t stack_index;
 		struct ast_expression *un_op_val = exp->u.un_op.exp;
@@ -270,6 +306,44 @@ static void generate_func_epilogue_and_ret(struct x86_ctx *ctx)
 	emit(ctx, " ret\n");
 }
 
+static char *label_if_else_else(void)
+{
+	static unsigned long counter = 0;
+	return xmkstr("_else_%lu", counter++);
+}
+
+static char *label_if_else_end(void)
+{
+	static unsigned long counter = 0;
+	return xmkstr("_if_else_end_%lu", counter++);
+}
+
+static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
+{
+	char *label_end = label_if_else_end();
+
+	if (ie->else_st) {
+		char *label_else = label_if_else_else();
+		generate_expression(ie->condition, ctx);
+		emit(ctx, " cmp	$0, %%eax\n");
+		emit(ctx, " je	%s\n", label_else);
+		generate_statement(ie->if_st, ctx);
+		emit(ctx, " jmp %s\n", label_end);
+		emit(ctx, "%s:\n", label_else);
+		generate_statement(ie->else_st, ctx);
+		emit(ctx, "%s:\n", label_end);
+		free(label_else);
+	} else {
+		generate_expression(ie->condition, ctx);
+		emit(ctx, " cmp	$0, %%eax\n");
+		emit(ctx, " je	%s\n", label_end);
+		generate_statement(ie->if_st, ctx);
+		emit(ctx, "%s:\n", label_end);
+	}
+
+	free(label_end);
+}
+
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
 	switch(st->type) {
@@ -302,6 +376,9 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		break;
 	case AST_ST_EXPRESSION:
 		generate_expression(st->u.exp, ctx);
+		break;
+	case AST_ST_IF_ELSE:
+		generate_if_else(&st->u.if_else, ctx);
 		break;
 	default:
 		die("generate x86: unknown statement type %d", st->type);
