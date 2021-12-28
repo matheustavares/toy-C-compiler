@@ -26,6 +26,7 @@ void symtable_init(struct symtable *tab)
 
 void symtable_cpy(struct symtable *dst, struct symtable *src)
 {
+	memset(dst, 0, sizeof(*dst));
 	strmap_cpy(&dst->syms, &src->syms);
 	dst->nr = src->nr;
 	dst->alloc = 0;
