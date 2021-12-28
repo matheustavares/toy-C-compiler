@@ -18,7 +18,7 @@ struct sym_data {
 		/* struct ... */ /* SYM_FUNC */
 	} u;
 	struct token *tok;
-	/* unsigned int scope; */
+	unsigned int scope;
 };
 
 struct symtable {
@@ -35,7 +35,7 @@ struct sym_data *symtable_find(struct symtable *tab, const char *symname);
 int symtable_has(struct symtable *tab, const char *symname);
 
 void symtable_put_lvar(struct symtable *tab, struct ast_var_decl *decl,
-		       size_t stack_index);
+		       size_t stack_index, unsigned int scope);
 size_t symtable_var_ref(struct symtable *tab, struct var_ref *v);
 
 #endif

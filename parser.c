@@ -1,10 +1,14 @@
 #include "util.h"
 #include "lexer.h"
 #include "parser.h"
+#include "lib/array.h"
 
 /*******************************************************************************
  *				Parsing
 *******************************************************************************/
+
+static struct ast_expression *parse_exp(struct token **tok_ptr);
+static struct ast_statement *parse_statement(struct token **tok_ptr);
 
 static char *str_join_token_types(const char *clause, va_list tt_list)
 {
@@ -75,7 +79,6 @@ static enum un_op_type tt2un_op_type(enum token_type type)
 	}
 }
 
-static struct ast_expression *parse_exp(struct token **tok_ptr);
 static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 {
 	struct ast_expression *exp;
@@ -379,10 +382,28 @@ static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
 	return decl;
 }
 
+static struct ast_statement *parse_statement_block(struct token **tok_ptr)
+{
+	struct ast_statement *st = xcalloc(1, sizeof(*st));
+	struct token *tok = *tok_ptr;
+	struct block *blk = &(st->u.block);
+
+	check_and_pop(&tok, TOK_OPEN_BRACE);
+	st->type = AST_ST_BLOCK;
+	while (!end_token(tok) && tok->type != TOK_CLOSE_BRACE) {
+		ALLOC_GROW(blk->items, blk->nr + 1, blk->alloc);
+		blk->items[blk->nr++] = parse_statement(&tok);
+	}
+	check_and_pop(&tok, TOK_CLOSE_BRACE);
+
+	*tok_ptr = tok;
+	return st;
+}
+
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration)
 {
-	struct ast_statement *st = xcalloc(1, sizeof(*st));
+	struct ast_statement *st = xmalloc(sizeof(*st));
 	struct token *tok = *tok_ptr;
 
 	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
@@ -407,6 +428,8 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		st->type = AST_ST_VAR_DECL;
 		st->u.decl = parse_var_decl(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
+	} else if (tok->type == TOK_OPEN_BRACE) {
+		st = parse_statement_block(&tok);
 	} else {
 		/* must be an expression */
 		st->type = AST_ST_EXPRESSION;
@@ -425,8 +448,7 @@ static struct ast_statement *parse_statement(struct token **tok_ptr)
 
 static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 {
-	struct ast_func_decl *fun = xcalloc(1, sizeof(*fun));
-	struct ast_statement **last_st = &(fun->body);
+	struct ast_func_decl *fun = xmalloc(sizeof(*fun));
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INT_KW);
@@ -434,12 +456,7 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	fun->name = xstrdup((char *)tok[-1].value);
 	check_and_pop(&tok, TOK_OPEN_PAR);
 	check_and_pop(&tok, TOK_CLOSE_PAR);
-	check_and_pop(&tok, TOK_OPEN_BRACE);
-	while (!end_token(tok) && tok->type != TOK_CLOSE_BRACE) {
-		*last_st = parse_statement(&tok);
-		last_st = &((*last_st)->next);
-	}
-	check_and_pop(&tok, TOK_CLOSE_BRACE);
+	fun->body = parse_statement_block(&tok);
 
 	*tok_ptr = tok;
 	return fun;
@@ -449,6 +466,11 @@ struct ast_program *parse_program(struct token *toks)
 {
 	struct ast_program *prog = xmalloc(sizeof(*prog));
 	prog->fun = parse_func_decl(&toks);
+
+	if (!end_token(toks))
+		die("parser: expecting EOF got %s\n%s",
+		    tok2str(toks), show_token_on_source_line(toks));
+
 	return prog;
 }
 
@@ -509,6 +531,11 @@ static void free_ast_statement(struct ast_statement *st)
 		if (st->u.if_else.else_st)
 			free_ast_statement(st->u.if_else.else_st);
 		break;
+	case AST_ST_BLOCK:
+		for (size_t i = 0; i < st->u.block.nr; i++)
+			free_ast_statement(st->u.block.items[i]);
+		free(st->u.block.items);
+		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
@@ -517,12 +544,7 @@ static void free_ast_statement(struct ast_statement *st)
 
 static void free_ast_func_decl(struct ast_func_decl *fun)
 {
-	struct ast_statement *st = fun->body;
-	while (st) {
-		struct ast_statement *next = st->next;
-		free_ast_statement(st);
-		st = next;
-	}
+	free_ast_statement(fun->body);
 	free((char *)fun->name);
 	free(fun);
 }

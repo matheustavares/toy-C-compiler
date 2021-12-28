@@ -118,6 +118,7 @@ struct ast_statement {
 		AST_ST_VAR_DECL,
 		AST_ST_EXPRESSION,
 		AST_ST_IF_ELSE,
+		AST_ST_BLOCK,
 	} type;
 
 	union {
@@ -129,13 +130,17 @@ struct ast_statement {
 			struct ast_expression *condition;
 			struct ast_statement *if_st, *else_st; /* else is optional */
 		} if_else;
-	} u;
 
-	struct ast_statement *next;
+		struct block {
+			struct ast_statement **items;
+			size_t alloc, nr;
+		} block;
+	} u;
 };
 
 struct ast_func_decl {
 	const char *name;
+	/* Must be of type AST_ST_BLOCK. (Enforced by parser.c) */
 	struct ast_statement *body;
 };
 

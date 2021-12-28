@@ -55,21 +55,23 @@ int symtable_has(struct symtable *tab, const char *symname)
 }
 
 void symtable_put_lvar(struct symtable *tab, struct ast_var_decl *decl,
-		       size_t stack_index) 
+		       size_t stack_index, unsigned int scope)
 {
 	struct sym_data *sym = symtable_find(tab, decl->name);
-	if (sym) {
+	if (sym && sym->scope == scope) {
 		die("redeclaration of variable '%s'. First:\n%s\nThen:\n%s",
 		    decl->name, show_token_on_source_line(sym->tok),
 		    show_token_on_source_line(decl->tok));
+	} else if (!sym) {
+		ALLOC_GROW(tab->data, tab->nr + 1, tab->alloc);
+		sym = &tab->data[tab->nr];
+		strmap_put(&tab->syms, decl->name, (void *)tab->nr);
+		tab->nr++;
 	}
-	ALLOC_GROW(tab->data, tab->nr + 1, tab->alloc);
-	sym = &tab->data[tab->nr];
 	sym->type = SYM_LOCAL_VAR;
 	sym->u.stack_index = stack_index;
 	sym->tok = decl->tok;
-	strmap_put(&tab->syms, decl->name, (void *)tab->nr);
-	tab->nr++;
+	sym->scope = scope;
 }
 
 size_t symtable_var_ref(struct symtable *tab, struct var_ref *v)

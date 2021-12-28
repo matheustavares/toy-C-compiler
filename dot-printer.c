@@ -155,6 +155,14 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 			print_arc_label(node, next_node, "else");
 		}
 		break;
+	case AST_ST_BLOCK:
+		node = add_label(labels, xstrdup("Block"));
+		for (size_t i = 0; i < st->u.block.nr; i++) {
+			struct ast_statement *item = st->u.block.items[i];
+			size_t item_node = print_ast_statement(item, labels);
+			print_arc(node, item_node);
+		}
+		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
@@ -164,10 +172,8 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
 	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
-	for (struct ast_statement *st = fun->body; st; st = st->next) {
-		size_t next_node = print_ast_statement(st, labels);
-		print_arc(node, next_node);
-	}
+	size_t next_node = print_ast_statement(fun->body, labels);
+	print_arc(node, next_node);
 	return node;
 }
 

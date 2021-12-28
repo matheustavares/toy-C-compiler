@@ -22,7 +22,7 @@ struct x86_ctx {
 	 * 0 otherwise.
 	 */
 	size_t stack_index;
-	/* unsigned long scope; */
+	unsigned long scope;
 };
 
 #define emit(ctx, ...) \
@@ -344,6 +344,26 @@ static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
 	free(label_end);
 }
 
+static void generate_statement_block(struct ast_statement *st, struct x86_ctx *ctx)
+{
+	struct symtable *cpy, *saved_symtable;
+	unsigned int saved_scope = ctx->scope++;
+
+	cpy = xmalloc(sizeof(*cpy));
+	symtable_cpy(cpy, ctx->symtable);
+	saved_symtable = ctx->symtable;
+	ctx->symtable = cpy;
+
+	assert(st->type == AST_ST_BLOCK);
+	for (size_t i = 0; i < st->u.block.nr; i++)
+		generate_statement(st->u.block.items[i], ctx);
+
+	ctx->scope = saved_scope;
+	ctx->symtable = saved_symtable;
+	symtable_destroy(cpy);
+	free(cpy);
+}
+
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
 	switch(st->type) {
@@ -360,7 +380,7 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		 * assignment to itself:
 		 *		int v = v = 2;
 		 */
-		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index);
+		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
 		if (decl->value) {
 			generate_expression(decl->value, ctx);
 		} else {
@@ -380,6 +400,9 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 	case AST_ST_IF_ELSE:
 		generate_if_else(&st->u.if_else, ctx);
 		break;
+	case AST_ST_BLOCK:
+		generate_statement_block(st, ctx);
+		break;
 	default:
 		die("generate x86: unknown statement type %d", st->type);
 	}
@@ -395,22 +418,20 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	emit(ctx, " mov	%%rsp, %%rbp\n");
 	ctx->stack_index = 8; /* sizeof(%rbp) */
 
-	struct ast_statement *st, *last_st = NULL;;
-	for (st = fun->body; st; last_st = st, st = st->next)
-		generate_statement(st, ctx);
-
-	if (!last_st || last_st->type != AST_ST_RETURN) {
-		/*
-		 * If the function is missing a return statement, and it is
-		 * the main() function, it should return 0. If it is not
-		 * main(), the behavior is undefined. To keep uniformity, we
-		 * will return 0 in both cases. But let's warn the user.
-		 */
-		warning("function '%s' is missing a return statement. Will return 0.",
-			fun->name);
-		emit(ctx, " mov	$0, %%eax\n");
-		generate_func_epilogue_and_ret(ctx);
-	}
+	generate_statement_block(fun->body, ctx);
+	/*
+	 * If the function is missing a return statement, and it is
+	 * the main() function, it should return 0. If it is not
+	 * main(), the behavior is undefined. To keep uniformity, we
+	 * will return 0 in both cases.
+	 *
+	 * NEEDSWORK: this will be redundant if there was already a return
+	 * statement, but it would be trickier to test whether all if-else
+	 * branches have return statements, so we accept the
+	 * redundancy.
+	 */
+	emit(ctx, " mov	$0, %%eax\n");
+	generate_func_epilogue_and_ret(ctx);
 	ctx->stack_index = 0;
 }
 
@@ -442,6 +463,7 @@ void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 	ctx.symtable = &symtable;
 	ctx.out = file;
 	ctx.stack_index = 0;
+	ctx.scope = 0;
 
 	generate_prog(prog, &ctx);
 
