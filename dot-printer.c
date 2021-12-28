@@ -138,7 +138,7 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		node = add_label(labels, xmkstr("Declare variable '%s'", st->u.decl->name));
 		if (st->u.decl->value) {
 			next_node = print_ast_expression(st->u.decl->value, labels);
-			print_arc_label(node, next_node, "with\nvalue");
+			print_arc_label(node, next_node, "with\\nvalue");
 		}
 		break;
 	case AST_ST_EXPRESSION:
