@@ -65,6 +65,11 @@ const char *tt2str(enum token_type tt)
 	case TOK_RETURN_KW: return "<return> keyword";
 	case TOK_IF_KW: return "<if> keyword";
 	case TOK_ELSE_KW: return "<else> keyword";
+	case TOK_FOR_KW: return "<for> keyword";
+	case TOK_WHILE_KW: return "<while> keyword";
+	case TOK_DO_KW: return "<do> keyword";
+	case TOK_BREAK_KW: return "<break> keyword";
+	case TOK_CONTINUE_KW: return "<continue> keyword";
 
 	case TOK_IDENTIFIER: return "<identifier>";
 	case TOK_INTEGER: return "<integer>";
@@ -322,6 +327,27 @@ struct token *lex(const char *str)
 			add_token(TOK_ELSE_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
+		} else if (skip_prefix(str, "for", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_FOR_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "while", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_WHILE_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "do", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_DO_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "break", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_BREAK_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "continue", &aux) && !char_in(*aux, ALPHA_NUM)) {
+			add_token(TOK_CONTINUE_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+
 		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
 		} else if (skip_chars(str, ALPHA, &aux) && !char_in(*aux, NUM)) {
 			add_token_with_value(TOK_IDENTIFIER, xstrndup(str, aux - str));
