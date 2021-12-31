@@ -102,6 +102,11 @@ struct ast_expression {
 	} u;
 };
 
+/* A possibly null expression. */
+struct ast_opt_expression {
+	struct ast_expression *exp;
+};
+
 struct ast_var_decl {
 	const char *name;
 	struct token *tok;
@@ -122,9 +127,8 @@ struct ast_statement {
 	} type;
 
 	union {
-		/* TODO: maybe should unify `ret_exp` and `exp`? */
 		struct ast_expression *ret_exp;
-		struct ast_expression *exp;
+		struct ast_opt_expression opt_exp;
 		struct ast_var_decl *decl;
 		struct if_else {
 			struct ast_expression *condition;

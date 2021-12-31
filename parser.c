@@ -430,10 +430,13 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		check_and_pop(&tok, TOK_SEMICOLON);
 	} else if (tok->type == TOK_OPEN_BRACE) {
 		st = parse_statement_block(&tok);
+	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
+		st->type = AST_ST_EXPRESSION;
+		st->u.opt_exp.exp = NULL;
 	} else {
 		/* must be an expression */
 		st->type = AST_ST_EXPRESSION;
-		st->u.exp = parse_exp(&tok);
+		st->u.opt_exp.exp = parse_exp(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
 	}
 
@@ -523,7 +526,8 @@ static void free_ast_statement(struct ast_statement *st)
 		free_ast_var_decl(st->u.decl);
 		break;
 	case AST_ST_EXPRESSION:
-		free_ast_expression(st->u.exp);
+		if (st->u.opt_exp.exp)
+			free_ast_expression(st->u.opt_exp.exp);
 		break;
 	case AST_ST_IF_ELSE:
 		free_ast_expression(st->u.if_else.condition);

@@ -404,7 +404,8 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		ctx->stack_index += 8;
 		break;
 	case AST_ST_EXPRESSION:
-		generate_expression(st->u.exp, ctx);
+		if (st->u.opt_exp.exp)
+			generate_expression(st->u.opt_exp.exp, ctx);
 		break;
 	case AST_ST_IF_ELSE:
 		generate_if_else(&st->u.if_else, ctx);
