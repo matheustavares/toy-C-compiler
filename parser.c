@@ -403,8 +403,15 @@ static struct ast_statement *parse_statement_block(struct token **tok_ptr)
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration)
 {
-	struct ast_statement *st = xmalloc(sizeof(*st));
+	struct ast_statement *st;
 	struct token *tok = *tok_ptr;
+
+	if (tok->type == TOK_OPEN_BRACE) {
+		st = parse_statement_block(&tok);
+		goto out;
+	}
+
+	st = xmalloc(sizeof(*st));
 
 	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
 		st->type = AST_ST_RETURN;
@@ -428,8 +435,6 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		st->type = AST_ST_VAR_DECL;
 		st->u.decl = parse_var_decl(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
-	} else if (tok->type == TOK_OPEN_BRACE) {
-		st = parse_statement_block(&tok);
 	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
 		st->type = AST_ST_EXPRESSION;
 		st->u.opt_exp.exp = NULL;
@@ -440,6 +445,7 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		check_and_pop(&tok, TOK_SEMICOLON);
 	}
 
+out:
 	*tok_ptr = tok;
 	return st;
 }
