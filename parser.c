@@ -9,6 +9,8 @@
 
 static struct ast_expression *parse_exp(struct token **tok_ptr);
 static struct ast_statement *parse_statement(struct token **tok_ptr);
+static struct ast_statement *parse_statement_1(struct token **tok_ptr,
+					       int allow_declaration);
 
 static char *str_join_token_types(const char *clause, va_list tt_list)
 {
@@ -431,7 +433,7 @@ static struct ast_statement *parse_for_statement(struct token **tok_ptr)
 			st->u.for_decl.epilogue.exp = parse_exp(&tok);
 			check_and_pop(&tok, TOK_CLOSE_PAR);
 		}
-		st->u.for_decl.body = parse_statement(&tok);
+		st->u.for_decl.body = parse_statement_1(&tok, 0);
 	} else {
 		st->type = AST_ST_FOR;
 		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
@@ -452,7 +454,7 @@ static struct ast_statement *parse_for_statement(struct token **tok_ptr)
 			st->u._for.epilogue.exp = parse_exp(&tok);
 			check_and_pop(&tok, TOK_CLOSE_PAR);
 		}
-		st->u._for.body = parse_statement(&tok);
+		st->u._for.body = parse_statement_1(&tok, 0);
 	}
 
 	*tok_ptr = tok;
@@ -507,11 +509,11 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		check_and_pop(&tok, TOK_OPEN_PAR);
 		st->u._while.condition = parse_exp(&tok);
 		check_and_pop(&tok, TOK_CLOSE_PAR);
-		st->u._while.body = parse_statement(&tok);
+		st->u._while.body = parse_statement_1(&tok, 0);
 
 	} else if (check_and_pop_gently(&tok, TOK_DO_KW)) {
 		st->type = AST_ST_DO;
-		st->u._do.body = parse_statement(&tok);
+		st->u._do.body = parse_statement_1(&tok, 0);
 		check_and_pop(&tok, TOK_WHILE_KW);
 		check_and_pop(&tok, TOK_OPEN_PAR);
 		st->u._do.condition = parse_exp(&tok);
