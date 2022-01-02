@@ -169,6 +169,9 @@ struct ast_statement {
 			struct ast_statement *body;
 			struct ast_expression *condition;
 		} _do;
+
+		struct token *continue_tok,
+			     *break_tok;
 	} u;
 };
 

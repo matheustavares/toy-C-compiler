@@ -522,10 +522,12 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 
 	} else if (check_and_pop_gently(&tok, TOK_BREAK_KW)) {
 		st->type = AST_ST_BREAK;
+		st->u.break_tok = &tok[-1];
 		check_and_pop(&tok, TOK_SEMICOLON);
 
 	} else if (check_and_pop_gently(&tok, TOK_CONTINUE_KW)) {
 		st->type = AST_ST_CONTINUE;
+		st->u.continue_tok = &tok[-1];
 		check_and_pop(&tok, TOK_SEMICOLON);
 
 	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {

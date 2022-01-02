@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "util.h"
 #include "symtable.h"
+#include "lexer.h"
 #include "lib/stack.h"
 
 struct x86_ctx {
@@ -559,14 +560,14 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		break;
 	case AST_ST_BREAK:
 		if (stack_empty(&ctx->break_labels))
-			/* TODO: print line from source. */
-			die("generate x86: nothing to break from.");
+			die("generate x86: nothing to break from.\n%s",
+			    show_token_on_source_line(st->u.break_tok));
 		emit(ctx, " jmp  %s\n", (char *)stack_peek(&ctx->break_labels));
 		break;
 	case AST_ST_CONTINUE:
 		if (stack_empty(&ctx->continue_labels))
-			/* TODO: print line from source. */
-			die("generate x86: nothing to continue to.");
+			die("generate x86: nothing to continue to.\n%s",
+			    show_token_on_source_line(st->u.continue_tok));
 		emit(ctx, " jmp  %s\n", (char *)stack_peek(&ctx->continue_labels));
 		break;
 	default:
