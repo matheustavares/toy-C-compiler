@@ -18,11 +18,13 @@ struct x86_ctx {
 	 * even though we store unsigned size_t, the address should be
 	 * interpreted as "%rpb - stack_index";
 	 *
-	 * This is valid *only* valid inside function generation, and should be
+	 * This is *only* valid inside function generation, and should be
 	 * 0 otherwise.
 	 */
 	size_t stack_index;
 	unsigned long scope;
+	char *continue_label,
+	     *break_label;
 };
 
 #define emit(ctx, ...) \
@@ -388,6 +390,8 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 	char *label_start = xmkstr("_while_start_%lu", counter);
 	char *label_end = xmkstr("_while_end_%lu", counter);
 	counter++;
+	ctx->break_label = label_end;
+	ctx->continue_label = label_start;
 
 	assert(st->type == AST_ST_WHILE);
 	emit(ctx, "%s:\n", label_start);
@@ -398,6 +402,8 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " jmp %s\n", label_start);
 	emit(ctx, "%s:\n", label_end);
 
+	ctx->break_label = NULL;
+	ctx->continue_label = NULL;
 	free(label_start);
 	free(label_end);
 }
@@ -405,14 +411,27 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
 {
 	static unsigned long counter = 0;
-	char *label_start = xmkstr("_do_start_%lu", counter++);
+	char *label_start = xmkstr("_do_start_%lu", counter);
+	char *label_end = xmkstr("_do_end_%lu", counter);
+	char *label_condition = xmkstr("_do_condition_%lu", counter);
+	counter++;
+	ctx->break_label = label_end;
+	ctx->continue_label = label_condition;
+
 	assert(st->type == AST_ST_DO);
 	emit(ctx, "%s:\n", label_start);
 	generate_statement(st->u._do.body, ctx);
+	emit(ctx, "%s:\n", label_condition);
 	generate_expression(st->u._do.condition, ctx);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " jne	%s\n", label_start);
+	emit(ctx, "%s:\n", label_end);
+
+	ctx->break_label = NULL;
+	ctx->continue_label = NULL;
 	free(label_start);
+	free(label_end);
+	free(label_condition);
 }
 
 static void generate_opt_expression(struct ast_opt_expression opt_exp,
@@ -427,7 +446,10 @@ static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
 	static unsigned long counter = 0;
 	char *label_condition = xmkstr("_for_condition_%lu", counter);
 	char *label_end = xmkstr("_for_end_%lu", counter);
+	char *label_epilogue = xmkstr("_for_epilogue_%lu", counter);
 	counter++;
+	ctx->break_label = label_end;
+	ctx->continue_label = label_epilogue;
 
 	assert(st->type == AST_ST_FOR);
 	generate_opt_expression(st->u._for.prologue, ctx);
@@ -436,12 +458,16 @@ static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_end);
 	generate_statement(st->u._for.body, ctx);
+	emit(ctx, "%s:\n", label_epilogue);
 	generate_opt_expression(st->u._for.epilogue, ctx);
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
+	ctx->break_label = NULL;
+	ctx->continue_label = NULL;
 	free(label_condition);
 	free(label_end);
+	free(label_epilogue);
 }
 
 static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
@@ -472,7 +498,10 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 	static unsigned long counter = 0;
 	char *label_condition = xmkstr("_for_decl_condition_%lu", counter);
 	char *label_end = xmkstr("_for_decl_end_%lu", counter);
+	char *label_epilogue = xmkstr("_for_decl_epilogue_%lu", counter);
 	counter++;
+	ctx->break_label = label_end;
+	ctx->continue_label = label_epilogue;
 
 	assert(st->type == AST_ST_FOR_DECL);
 	generate_var_decl(st->u.for_decl.decl, ctx);
@@ -481,12 +510,16 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_end);
 	generate_statement(st->u._for.body, ctx);
+	emit(ctx, "%s:\n", label_epilogue);
 	generate_opt_expression(st->u._for.epilogue, ctx);
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
+	ctx->break_label = NULL;
+	ctx->continue_label = NULL;
 	free(label_condition);
 	free(label_end);
+	free(label_epilogue);
 }
 #define generate_for_decl(st, ctx) \
 	generate_new_scope(st, ctx, for_decl_generator)
@@ -522,6 +555,18 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		break;
 	case AST_ST_FOR_DECL:
 		generate_for_decl(st, ctx);
+		break;
+	case AST_ST_BREAK:
+		if (!ctx->break_label)
+			/* TODO: print line from source. */
+			die("generate x86: nothing to break from.");
+		emit(ctx, " jmp  %s\n", ctx->break_label);
+		break;
+	case AST_ST_CONTINUE:
+		if (!ctx->continue_label)
+			/* TODO: print line from source. */
+			die("generate x86: nothing to continue to.");
+		emit(ctx, " jmp  %s\n", ctx->continue_label);
 		break;
 	default:
 		die("generate x86: unknown statement type %d", st->type);
@@ -570,7 +615,7 @@ static void x86_cleanup(void)
 
 void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 {
-	struct x86_ctx ctx;
+	struct x86_ctx ctx = { 0 };
 	struct symtable symtable;
 	FILE *file = fopen(out_filename, "w");
 	if (!file)
@@ -582,8 +627,6 @@ void generate_x86_asm(struct ast_program *prog, const char *out_filename)
 	symtable_init(&symtable);
 	ctx.symtable = &symtable;
 	ctx.out = file;
-	ctx.stack_index = 0;
-	ctx.scope = 0;
 
 	generate_prog(prog, &ctx);
 
