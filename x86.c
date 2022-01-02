@@ -3,6 +3,7 @@
 #include "parser.h"
 #include "util.h"
 #include "symtable.h"
+#include "lib/stack.h"
 
 struct x86_ctx {
 	FILE *out;
@@ -23,8 +24,8 @@ struct x86_ctx {
 	 */
 	size_t stack_index;
 	unsigned long scope;
-	char *continue_label,
-	     *break_label;
+	struct stack continue_labels,
+		     break_labels;
 };
 
 #define emit(ctx, ...) \
@@ -390,8 +391,8 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 	char *label_start = xmkstr("_while_start_%lu", counter);
 	char *label_end = xmkstr("_while_end_%lu", counter);
 	counter++;
-	ctx->break_label = label_end;
-	ctx->continue_label = label_start;
+	stack_push(&ctx->break_labels, label_end);
+	stack_push(&ctx->continue_labels, label_start);
 
 	assert(st->type == AST_ST_WHILE);
 	emit(ctx, "%s:\n", label_start);
@@ -402,8 +403,8 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " jmp %s\n", label_start);
 	emit(ctx, "%s:\n", label_end);
 
-	ctx->break_label = NULL;
-	ctx->continue_label = NULL;
+	stack_pop(&ctx->break_labels);
+	stack_pop(&ctx->continue_labels);
 	free(label_start);
 	free(label_end);
 }
@@ -415,8 +416,8 @@ static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
 	char *label_end = xmkstr("_do_end_%lu", counter);
 	char *label_condition = xmkstr("_do_condition_%lu", counter);
 	counter++;
-	ctx->break_label = label_end;
-	ctx->continue_label = label_condition;
+	stack_push(&ctx->break_labels, label_end);
+	stack_push(&ctx->continue_labels, label_condition);
 
 	assert(st->type == AST_ST_DO);
 	emit(ctx, "%s:\n", label_start);
@@ -427,8 +428,8 @@ static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " jne	%s\n", label_start);
 	emit(ctx, "%s:\n", label_end);
 
-	ctx->break_label = NULL;
-	ctx->continue_label = NULL;
+	stack_pop(&ctx->break_labels);
+	stack_pop(&ctx->continue_labels);
 	free(label_start);
 	free(label_end);
 	free(label_condition);
@@ -448,8 +449,8 @@ static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
 	char *label_end = xmkstr("_for_end_%lu", counter);
 	char *label_epilogue = xmkstr("_for_epilogue_%lu", counter);
 	counter++;
-	ctx->break_label = label_end;
-	ctx->continue_label = label_epilogue;
+	stack_push(&ctx->break_labels, label_end);
+	stack_push(&ctx->continue_labels, label_epilogue);
 
 	assert(st->type == AST_ST_FOR);
 	generate_opt_expression(st->u._for.prologue, ctx);
@@ -463,8 +464,8 @@ static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
-	ctx->break_label = NULL;
-	ctx->continue_label = NULL;
+	stack_pop(&ctx->break_labels);
+	stack_pop(&ctx->continue_labels);
 	free(label_condition);
 	free(label_end);
 	free(label_epilogue);
@@ -500,8 +501,8 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 	char *label_end = xmkstr("_for_decl_end_%lu", counter);
 	char *label_epilogue = xmkstr("_for_decl_epilogue_%lu", counter);
 	counter++;
-	ctx->break_label = label_end;
-	ctx->continue_label = label_epilogue;
+	stack_push(&ctx->break_labels, label_end);
+	stack_push(&ctx->continue_labels, label_epilogue);
 
 	assert(st->type == AST_ST_FOR_DECL);
 	generate_var_decl(st->u.for_decl.decl, ctx);
@@ -515,8 +516,8 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
-	ctx->break_label = NULL;
-	ctx->continue_label = NULL;
+	stack_pop(&ctx->break_labels);
+	stack_pop(&ctx->continue_labels);
 	free(label_condition);
 	free(label_end);
 	free(label_epilogue);
@@ -557,16 +558,16 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		generate_for_decl(st, ctx);
 		break;
 	case AST_ST_BREAK:
-		if (!ctx->break_label)
+		if (stack_empty(&ctx->break_labels))
 			/* TODO: print line from source. */
 			die("generate x86: nothing to break from.");
-		emit(ctx, " jmp  %s\n", ctx->break_label);
+		emit(ctx, " jmp  %s\n", (char *)stack_peek(&ctx->break_labels));
 		break;
 	case AST_ST_CONTINUE:
-		if (!ctx->continue_label)
+		if (stack_empty(&ctx->continue_labels))
 			/* TODO: print line from source. */
 			die("generate x86: nothing to continue to.");
-		emit(ctx, " jmp  %s\n", ctx->continue_label);
+		emit(ctx, " jmp  %s\n", (char *)stack_peek(&ctx->continue_labels));
 		break;
 	default:
 		die("generate x86: unknown statement type %d", st->type);
