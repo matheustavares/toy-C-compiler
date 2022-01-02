@@ -30,7 +30,7 @@ $(LIB_TESTS_BINS): %: %.c Makefile $(OBJS) $(HEADERS)
 tests: lib-tests compiler-tests
 lib-tests: $(LIB_TESTS_BINS)
 	cd lib-tests && ./run-all.sh
-compiler-tests:
+compiler-tests: $(MAIN)
 	cd compiler-tests && ./test_compiler.sh ../$(MAIN) $(STAGES)
 
 ###############################################################################
