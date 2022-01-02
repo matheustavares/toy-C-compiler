@@ -5,7 +5,8 @@
 #define ALPHA "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 #define NUM "0123456789"
 #define WHITESPACE " \t\n"
-#define ALPHA_NUM (ALPHA NUM)
+#define IDENTIFIER_HEAD (ALPHA "_")
+#define IDENTIFIER_TAIL (ALPHA NUM "_")
 
 /*
  * Do not use this function if you want to include '\0' in `list`. As soon as
@@ -27,6 +28,13 @@ static int skip_chars(const char *str, const char *list, const char **skipped)
 {
 	for (*skipped = str; **skipped && char_in(**skipped, list); (*skipped)++)
 		;
+	return *skipped != str;
+}
+static int skip_one_char(const char *str, const char *list, const char **skipped)
+{
+	*skipped = str;
+	if (**skipped && char_in(**skipped, list))
+		(*skipped)++;
 	return *skipped != str;
 }
 
@@ -311,45 +319,45 @@ struct token *lex(const char *str)
 			add_token(TOK_BITWISE_OR);
 
 
-		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_INT_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "return", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "return", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_RETURN_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "if", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "if", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_IF_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "else", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "else", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_ELSE_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "for", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "for", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_FOR_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "while", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "while", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_WHILE_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "do", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "do", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_DO_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "break", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "break", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_BREAK_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-		} else if (skip_prefix(str, "continue", &aux) && !char_in(*aux, ALPHA_NUM)) {
+		} else if (skip_prefix(str, "continue", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_CONTINUE_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
-
-		/* TODO: allow '_' and '[a-Z]+[0-9]' identifiers. */
-		} else if (skip_chars(str, ALPHA, &aux) && !char_in(*aux, NUM)) {
+		} else if (skip_one_char(str, IDENTIFIER_HEAD, &aux) &&
+			   skip_chars(str, IDENTIFIER_TAIL, &aux) &&
+			   !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token_with_value(TOK_IDENTIFIER, xstrndup(str, aux - str));
 			col_no += aux - 1 - str;
 			str = aux - 1;
