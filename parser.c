@@ -400,6 +400,65 @@ static struct ast_statement *parse_statement_block(struct token **tok_ptr)
 	return st;
 }
 
+static struct ast_expression *gen_true_exp(void)
+{
+	struct ast_expression *exp = xmalloc(sizeof(*exp));
+	exp->type = AST_EXP_CONSTANT_INT;
+	exp->u.ival = 1;
+	return exp;
+}
+
+static struct ast_statement *parse_for_statement(struct token **tok_ptr)
+{
+	struct token *tok = *tok_ptr;
+	struct ast_statement *st = xmalloc(sizeof(*st));
+
+	check_and_pop(&tok, TOK_FOR_KW);
+	check_and_pop(&tok, TOK_OPEN_PAR);
+	if (tok->type == TOK_INT_KW) {
+		st->type = AST_ST_FOR_DECL;
+		st->u.for_decl.decl = parse_var_decl(&tok);
+		check_and_pop(&tok, TOK_SEMICOLON);
+		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
+			st->u.for_decl.condition = gen_true_exp();
+		} else {
+			st->u.for_decl.condition = parse_exp(&tok);
+			check_and_pop(&tok, TOK_SEMICOLON);
+		}
+		if (check_and_pop_gently(&tok, TOK_CLOSE_PAR)) {
+			st->u.for_decl.epilogue.exp = NULL;
+		} else {
+			st->u.for_decl.epilogue.exp = parse_exp(&tok);
+			check_and_pop(&tok, TOK_CLOSE_PAR);
+		}
+		st->u.for_decl.body = parse_statement(&tok);
+	} else {
+		st->type = AST_ST_FOR;
+		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
+			st->u._for.prologue.exp = NULL;
+		} else {
+			st->u._for.prologue.exp = parse_exp(&tok);
+			check_and_pop(&tok, TOK_SEMICOLON);
+		}
+		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
+			st->u._for.condition = gen_true_exp();
+		} else {
+			st->u._for.condition = parse_exp(&tok);
+			check_and_pop(&tok, TOK_SEMICOLON);
+		}
+		if (check_and_pop_gently(&tok, TOK_CLOSE_PAR)) {
+			st->u._for.epilogue.exp = NULL;
+		} else {
+			st->u._for.epilogue.exp = parse_exp(&tok);
+			check_and_pop(&tok, TOK_CLOSE_PAR);
+		}
+		st->u._for.body = parse_statement(&tok);
+	}
+
+	*tok_ptr = tok;
+	return st;
+}
+
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration)
 {
@@ -411,12 +470,18 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		goto out;
 	}
 
+	if (tok->type == TOK_FOR_KW) {
+		st = parse_for_statement(&tok);
+		goto out;
+	}
+
 	st = xmalloc(sizeof(*st));
 
 	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
 		st->type = AST_ST_RETURN;
 		st->u.ret_exp = parse_exp(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
+
 	} else if (check_and_pop_gently(&tok, TOK_IF_KW)) {
 		st->type = AST_ST_IF_ELSE;
 		check_and_pop(&tok, TOK_OPEN_PAR);
@@ -431,13 +496,40 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		st->u.if_else.if_st = parse_statement_1(&tok, 0);
 		if (check_and_pop_gently(&tok, TOK_ELSE_KW))
 			st->u.if_else.else_st = parse_statement_1(&tok, 0);
+
 	} else if (allow_declaration && tok->type == TOK_INT_KW) {
 		st->type = AST_ST_VAR_DECL;
 		st->u.decl = parse_var_decl(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
+
+	} else if (check_and_pop_gently(&tok, TOK_WHILE_KW)) {
+		st->type = AST_ST_WHILE;
+		check_and_pop(&tok, TOK_OPEN_PAR);
+		st->u._while.condition = parse_exp(&tok);
+		check_and_pop(&tok, TOK_CLOSE_PAR);
+		st->u._while.body = parse_statement(&tok);
+
+	} else if (check_and_pop_gently(&tok, TOK_DO_KW)) {
+		st->type = AST_ST_DO;
+		st->u._do.body = parse_statement(&tok);
+		check_and_pop(&tok, TOK_WHILE_KW);
+		check_and_pop(&tok, TOK_OPEN_PAR);
+		st->u._do.condition = parse_exp(&tok);
+		check_and_pop(&tok, TOK_CLOSE_PAR);
+		check_and_pop(&tok, TOK_SEMICOLON);
+
+	} else if (check_and_pop_gently(&tok, TOK_BREAK_KW)) {
+		st->type = AST_ST_BREAK;
+		check_and_pop(&tok, TOK_SEMICOLON);
+
+	} else if (check_and_pop_gently(&tok, TOK_CONTINUE_KW)) {
+		st->type = AST_ST_CONTINUE;
+		check_and_pop(&tok, TOK_SEMICOLON);
+
 	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
 		st->type = AST_ST_EXPRESSION;
 		st->u.opt_exp.exp = NULL;
+
 	} else {
 		/* must be an expression */
 		st->type = AST_ST_EXPRESSION;
@@ -522,6 +614,12 @@ static void free_ast_var_decl(struct ast_var_decl *decl)
 	free(decl);
 }
 
+static void free_ast_opt_expression(struct ast_opt_expression opt_exp)
+{
+	if (opt_exp.exp)
+		free_ast_expression(opt_exp.exp);
+}
+
 static void free_ast_statement(struct ast_statement *st)
 {
 	switch (st->type) {
@@ -532,8 +630,7 @@ static void free_ast_statement(struct ast_statement *st)
 		free_ast_var_decl(st->u.decl);
 		break;
 	case AST_ST_EXPRESSION:
-		if (st->u.opt_exp.exp)
-			free_ast_expression(st->u.opt_exp.exp);
+		free_ast_opt_expression(st->u.opt_exp);
 		break;
 	case AST_ST_IF_ELSE:
 		free_ast_expression(st->u.if_else.condition);
@@ -545,6 +642,29 @@ static void free_ast_statement(struct ast_statement *st)
 		for (size_t i = 0; i < st->u.block.nr; i++)
 			free_ast_statement(st->u.block.items[i]);
 		free(st->u.block.items);
+		break;
+	case AST_ST_FOR:
+		free_ast_opt_expression(st->u._for.prologue);
+		free_ast_expression(st->u._for.condition);
+		free_ast_opt_expression(st->u._for.epilogue);
+		free_ast_statement(st->u._for.body);
+		break;
+	case AST_ST_FOR_DECL:
+		free_ast_var_decl(st->u.for_decl.decl);
+		free_ast_expression(st->u.for_decl.condition);
+		free_ast_opt_expression(st->u.for_decl.epilogue);
+		free_ast_statement(st->u.for_decl.body);
+		break;
+	case AST_ST_WHILE:
+		free_ast_expression(st->u._while.condition);
+		free_ast_statement(st->u._while.body);
+		break;
+	case AST_ST_DO:
+		free_ast_statement(st->u._do.body);
+		free_ast_expression(st->u._do.condition);
+		break;
+	case AST_ST_BREAK:
+	case AST_ST_CONTINUE:
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);

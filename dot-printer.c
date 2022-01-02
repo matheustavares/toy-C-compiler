@@ -125,6 +125,23 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 	return node;
 }
 
+static size_t print_ast_var_decl(struct ast_var_decl *decl, struct label_list *labels)
+{
+	size_t node = add_label(labels, xmkstr("Declare variable '%s'", decl->name));
+	if (decl->value) {
+		size_t value_node = print_ast_expression(decl->value, labels);
+		print_arc_label(node, value_node, "with\\nvalue");
+	}
+	return node;
+}
+
+static size_t print_ast_opt_expression(struct ast_opt_expression opt_exp,
+				       struct label_list *labels)
+{
+	return opt_exp.exp ? print_ast_expression(opt_exp.exp, labels) :
+	       add_label(labels, xstrdup("null expression"));
+}
+
 static size_t print_ast_statement(struct ast_statement *st, struct label_list *labels)
 {
 	size_t node, next_node;
@@ -135,17 +152,10 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		print_arc(node, next_node);
 		break;
 	case AST_ST_VAR_DECL:
-		node = add_label(labels, xmkstr("Declare variable '%s'", st->u.decl->name));
-		if (st->u.decl->value) {
-			next_node = print_ast_expression(st->u.decl->value, labels);
-			print_arc_label(node, next_node, "with\\nvalue");
-		}
+		node = print_ast_var_decl(st->u.decl, labels);
 		break;
 	case AST_ST_EXPRESSION:
-		if (st->u.opt_exp.exp)
-			node = print_ast_expression(st->u.opt_exp.exp, labels);
-		else
-			node = add_label(labels, xstrdup("null expression"));
+		node = print_ast_opt_expression(st->u.opt_exp, labels);
 		break;
 	case AST_ST_IF_ELSE:
 		node = add_label(labels, xstrdup("if"));
@@ -166,6 +176,50 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 			print_arc(node, item_node);
 		}
 		break;
+
+	case AST_ST_FOR:
+		node = add_label(labels, xstrdup("for"));
+		next_node = print_ast_opt_expression(st->u._for.prologue, labels);
+		print_arc_label(node, next_node, "prologue");
+		next_node = print_ast_expression(st->u._for.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		next_node = print_ast_opt_expression(st->u._for.epilogue, labels);
+		print_arc_label(node, next_node, "epilogue");
+		next_node = print_ast_statement(st->u._for.body, labels);
+		print_arc_label(node, next_node, "body");
+		break;
+	case AST_ST_FOR_DECL:
+		node = add_label(labels, xstrdup("for"));
+		next_node = print_ast_var_decl(st->u.for_decl.decl, labels);
+		print_arc_label(node, next_node, "prologue");
+		next_node = print_ast_expression(st->u.for_decl.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		next_node = print_ast_opt_expression(st->u.for_decl.epilogue, labels);
+		print_arc_label(node, next_node, "epilogue");
+		next_node = print_ast_statement(st->u.for_decl.body, labels);
+		print_arc_label(node, next_node, "body");
+		break;
+	case AST_ST_WHILE:
+		node = add_label(labels, xstrdup("while"));
+		next_node = print_ast_expression(st->u._while.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		next_node = print_ast_statement(st->u._while.body, labels);
+		print_arc_label(node, next_node, "body");
+		break;
+	case AST_ST_DO:
+		node = add_label(labels, xstrdup("do"));
+		next_node = print_ast_statement(st->u._do.body, labels);
+		print_arc_label(node, next_node, "body");
+		next_node = print_ast_expression(st->u._do.condition, labels);
+		print_arc_label(node, next_node, "condition");
+		break;
+	case AST_ST_BREAK:
+		node = add_label(labels, xstrdup("<break> keyword"));
+		break;
+	case AST_ST_CONTINUE:
+		node = add_label(labels, xstrdup("<continue> keyword"));
+		break;
+
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}

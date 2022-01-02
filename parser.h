@@ -124,6 +124,12 @@ struct ast_statement {
 		AST_ST_EXPRESSION,
 		AST_ST_IF_ELSE,
 		AST_ST_BLOCK,
+		AST_ST_FOR,
+		AST_ST_FOR_DECL,
+		AST_ST_WHILE,
+		AST_ST_DO,
+		AST_ST_BREAK,
+		AST_ST_CONTINUE,
 	} type;
 
 	union {
@@ -139,6 +145,30 @@ struct ast_statement {
 			struct ast_statement **items;
 			size_t alloc, nr;
 		} block;
+
+		struct {
+			struct ast_opt_expression prologue;
+			struct ast_expression *condition; /* must default to true when empty */
+			struct ast_opt_expression epilogue;
+			struct ast_statement *body;
+		} _for;
+
+		struct {
+			struct ast_var_decl *decl;
+			struct ast_expression *condition; /* must default to true when empty */
+			struct ast_opt_expression epilogue;
+			struct ast_statement *body;
+		} for_decl;
+
+		struct {
+			struct ast_expression *condition;
+			struct ast_statement *body;
+		} _while;
+
+		struct {
+			struct ast_statement *body;
+			struct ast_expression *condition;
+		} _do;
 	} u;
 };
 
