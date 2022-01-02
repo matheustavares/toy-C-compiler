@@ -344,7 +344,8 @@ static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
 	free(label_end);
 }
 
-static void generate_statement_block(struct ast_statement *st, struct x86_ctx *ctx)
+static void generate_new_scope(struct ast_statement *st, struct x86_ctx *ctx,
+	       void (*generator)(struct ast_statement *st, struct x86_ctx *ctx))
 {
 	struct symtable *cpy, *saved_symtable;
 	unsigned int saved_scope = ctx->scope++;
@@ -355,9 +356,7 @@ static void generate_statement_block(struct ast_statement *st, struct x86_ctx *c
 	saved_symtable = ctx->symtable;
 	ctx->symtable = cpy;
 
-	assert(st->type == AST_ST_BLOCK);
-	for (size_t i = 0; i < st->u.block.nr; i++)
-		generate_statement(st->u.block.items[i], ctx);
+	generator(st, ctx);
 
 	/* 
 	 * Deallocate block variables. Alternatively, we could do:  
@@ -373,6 +372,125 @@ static void generate_statement_block(struct ast_statement *st, struct x86_ctx *c
 	free(cpy);
 }
 
+static void block_statement_generator(struct ast_statement *st,
+				      struct x86_ctx *ctx)
+{
+	assert(st->type == AST_ST_BLOCK);
+	for (size_t i = 0; i < st->u.block.nr; i++)
+		generate_statement(st->u.block.items[i], ctx);
+}
+#define generate_statement_block(st, ctx) \
+	generate_new_scope(st, ctx, block_statement_generator)
+
+static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
+{
+	static unsigned long counter = 0;
+	char *label_start = xmkstr("_while_start_%lu", counter);
+	char *label_end = xmkstr("_while_end_%lu", counter);
+	counter++;
+
+	assert(st->type == AST_ST_WHILE);
+	emit(ctx, "%s:\n", label_start);
+	generate_expression(st->u._while.condition, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " je	%s\n", label_end);
+	generate_statement(st->u._while.body, ctx);
+	emit(ctx, " jmp %s\n", label_start);
+	emit(ctx, "%s:\n", label_end);
+
+	free(label_start);
+	free(label_end);
+}
+
+static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
+{
+	static unsigned long counter = 0;
+	char *label_start = xmkstr("_do_start_%lu", counter++);
+	assert(st->type == AST_ST_DO);
+	emit(ctx, "%s:\n", label_start);
+	generate_statement(st->u._do.body, ctx);
+	generate_expression(st->u._do.condition, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " jne	%s\n", label_start);
+	free(label_start);
+}
+
+static void generate_opt_expression(struct ast_opt_expression opt_exp,
+				    struct x86_ctx *ctx)
+{
+	if (opt_exp.exp)
+		generate_expression(opt_exp.exp, ctx);
+}
+
+static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
+{
+	static unsigned long counter = 0;
+	char *label_condition = xmkstr("_for_condition_%lu", counter);
+	char *label_end = xmkstr("_for_end_%lu", counter);
+	counter++;
+
+	assert(st->type == AST_ST_FOR);
+	generate_opt_expression(st->u._for.prologue, ctx);
+	emit(ctx, "%s:\n", label_condition);
+	generate_expression(st->u._for.condition, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " je	%s\n", label_end);
+	generate_statement(st->u._for.body, ctx);
+	generate_opt_expression(st->u._for.epilogue, ctx);
+	emit(ctx, " jmp	%s\n", label_condition);
+	emit(ctx, "%s:\n", label_end);
+
+	free(label_condition);
+	free(label_end);
+}
+
+static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
+{
+	/*
+	 * Put the varname on the symbol table before generating the
+	 * code for rexp due to the weird case of declaration with
+	 * assignment to itself:
+	 *		int v = v = 2;
+	 */
+	symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
+	if (decl->value) {
+		generate_expression(decl->value, ctx);
+	} else {
+		/* We don't really need to initialize it, but... */
+		emit(ctx, " mov	$0, %%eax\n");
+	}
+	/*
+	 * TODO: investigate if should push rax (and increment
+	 * stack_index by 8) or eax (and increment by 4).
+	 */
+	emit(ctx, " push	%%rax\n");
+	ctx->stack_index += 8;
+}
+
+static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
+{
+	static unsigned long counter = 0;
+	char *label_condition = xmkstr("_for_decl_condition_%lu", counter);
+	char *label_end = xmkstr("_for_decl_end_%lu", counter);
+	counter++;
+
+	assert(st->type == AST_ST_FOR_DECL);
+	generate_var_decl(st->u.for_decl.decl, ctx);
+	emit(ctx, "%s:\n", label_condition);
+	generate_expression(st->u._for.condition, ctx);
+	emit(ctx, " cmp	$0, %%eax\n");
+	emit(ctx, " je	%s\n", label_end);
+	generate_statement(st->u._for.body, ctx);
+	generate_opt_expression(st->u._for.epilogue, ctx);
+	emit(ctx, " jmp	%s\n", label_condition);
+	emit(ctx, "%s:\n", label_end);
+
+	free(label_condition);
+	free(label_end);
+}
+#define generate_for_decl(st, ctx) \
+	generate_new_scope(st, ctx, for_decl_generator)
+
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
 	switch(st->type) {
@@ -382,36 +500,28 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		generate_func_epilogue_and_ret(ctx);
 		break;
 	case AST_ST_VAR_DECL:
-		struct ast_var_decl *decl = st->u.decl;
-		/*
-		 * Put the varname on the symbol table before generating the
-		 * code for rexp due to the weird case of declaration with
-		 * assignment to itself:
-		 *		int v = v = 2;
-		 */
-		symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
-		if (decl->value) {
-			generate_expression(decl->value, ctx);
-		} else {
-			/* We don't really need to initialize it, but... */
-			emit(ctx, " mov	$0, %%eax\n");
-		}
-		/*
-		 * TODO: investigate if should push rax (and increment
-		 * stack_index by 8) or eax (and increment by 4).
-		 */
-		emit(ctx, " push	%%rax\n");
-		ctx->stack_index += 8;
+		generate_var_decl(st->u.decl, ctx);
 		break;
 	case AST_ST_EXPRESSION:
-		if (st->u.opt_exp.exp)
-			generate_expression(st->u.opt_exp.exp, ctx);
+		generate_opt_expression(st->u.opt_exp, ctx);
 		break;
 	case AST_ST_IF_ELSE:
 		generate_if_else(&st->u.if_else, ctx);
 		break;
 	case AST_ST_BLOCK:
 		generate_statement_block(st, ctx);
+		break;
+	case AST_ST_WHILE:
+		generate_while(st, ctx);
+		break;
+	case AST_ST_DO:
+		generate_do(st, ctx);
+		break;
+	case AST_ST_FOR:
+		generate_for(st, ctx);
+		break;
+	case AST_ST_FOR_DECL:
+		generate_for_decl(st, ctx);
 		break;
 	default:
 		die("generate x86: unknown statement type %d", st->type);
