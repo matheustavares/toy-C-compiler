@@ -599,7 +599,11 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	 */
 	emit(ctx, " mov	$0, %%eax\n");
 	generate_func_epilogue_and_ret(ctx);
+
 	ctx->stack_index = 0;
+	assert(stack_empty(&ctx->continue_labels) && stack_empty(&ctx->break_labels));
+	stack_destroy(&ctx->continue_labels, NULL);
+	stack_destroy(&ctx->break_labels, NULL);
 }
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
