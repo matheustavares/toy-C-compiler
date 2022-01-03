@@ -115,6 +115,7 @@ void strmap_destroy(struct strmap *map)
 	if (!map->table)
 		die("BUG: strmap_destroy called with uninitialized map");
 	hdestroy_r(map->table);
-	FREE_AND_NULL(map->table);
-	FREE_AND_NULL(map->keys);
+	free(map->table);
+	free(map->keys);
+	memset(map, 0, sizeof(*map));
 }

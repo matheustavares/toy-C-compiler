@@ -4,6 +4,10 @@
 /*
  * A generic hashtable with strings as keys.
  *
+ * struct strmap MUST be memset to zero before initialization and/or copying
+ * (only the destination struct). strmap_destroy() leaves the struct in a
+ * state ready for reinitialization.
+ *
  * Note: memory for both the keys and the values are responsibility of
  * the user. We will neither copy them nor free. Make sure the data
  * stays valid while using the strmap API and do not forget to free it
