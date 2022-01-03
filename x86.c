@@ -5,6 +5,7 @@
 #include "symtable.h"
 #include "lexer.h"
 #include "lib/stack.h"
+#include "lib/strmap.h"
 
 struct x86_ctx {
 	FILE *out;
@@ -27,6 +28,14 @@ struct x86_ctx {
 	unsigned long scope;
 	struct stack continue_labels,
 		     break_labels;
+
+	/*
+	 * We store NULL if a label is used in a goto statement and a token
+	 * if it is used in a label definition. Thus, if we get to the end of
+	 * a function with NULL values, it means a label was used but not
+	 * defined.
+	 */
+	struct strmap user_labels;
 };
 
 #define emit(ctx, ...) \
@@ -528,6 +537,8 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
+	const char *label;
+	struct token *tok;
 	switch(st->type) {
 	case AST_ST_RETURN:
 		generate_expression(st->u.ret_exp, ctx);
@@ -570,13 +581,41 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 			    show_token_on_source_line(st->u.continue_tok));
 		emit(ctx, " jmp  %s\n", (char *)stack_peek(&ctx->continue_labels));
 		break;
+	case AST_ST_LABELED_STATEMENT:
+		label = st->u.labeled_st.label;
+		if (strmap_find(&ctx->user_labels, label, (void **)&tok) && tok) {
+			die("generate x86: redefinition of label '%s'.\nFirst:\n%s\nThen:\n%s",
+			    label,
+			    show_token_on_source_line(tok),
+			    show_token_on_source_line(st->u.labeled_st.label_tok));
+		}
+		strmap_put(&ctx->user_labels, label, st->u.labeled_st.label_tok);
+		emit(ctx, "_label_%s:\n", label);
+		generate_statement(st->u.labeled_st.st, ctx);
+		break;
+	case AST_ST_GOTO:
+		label = st->u._goto.label;
+		if (!strmap_has(&ctx->user_labels, label))
+			strmap_put(&ctx->user_labels, label, NULL);
+		emit(ctx, " jmp _label_%s\n", label);
+		break;
+
 	default:
 		die("generate x86: unknown statement type %d", st->type);
 	}
 }
 
+static int user_labels_check_defined(const char *label, void *val, void *_)
+{
+	if (!val)
+		/* TODO: save token and use show_token_on_source_line(). */
+		die("generate x86: unknown label '%s'.", label);
+	return 0;
+}
+
 static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
+	strmap_init(&ctx->user_labels, strmap_val_plain_copy);
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
 
@@ -604,6 +643,10 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	assert(stack_empty(&ctx->continue_labels) && stack_empty(&ctx->break_labels));
 	stack_destroy(&ctx->continue_labels, NULL);
 	stack_destroy(&ctx->break_labels, NULL);
+
+	/* Check if all refered labels were defined. */
+	strmap_iterate(&ctx->user_labels, user_labels_check_defined, NULL);
+	strmap_destroy(&ctx->user_labels);
 }
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)

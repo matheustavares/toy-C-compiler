@@ -181,6 +181,7 @@ struct ast_statement {
 
 		struct {
 			const char *label;
+			struct token *label_tok;
 			struct ast_statement *st;
 		} labeled_st;
 	} u;

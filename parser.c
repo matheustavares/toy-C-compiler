@@ -540,6 +540,7 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		tok += 2;
 		st->type = AST_ST_LABELED_STATEMENT;
 		st->u.labeled_st.label = (const char *)tok[-2].value;
+		st->u.labeled_st.label_tok = &tok[-2];
 		st->u.labeled_st.st = parse_statement(&tok);
 
 	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
