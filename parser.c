@@ -530,6 +530,18 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		st->u.continue_tok = &tok[-1];
 		check_and_pop(&tok, TOK_SEMICOLON);
 
+	} else if (check_and_pop_gently(&tok, TOK_GOTO_KW)) {
+		st->type = AST_ST_GOTO;
+		check_and_pop(&tok, TOK_IDENTIFIER);
+		st->u._goto.label = (const char *)tok[-1].value;
+		check_and_pop(&tok, TOK_SEMICOLON);
+
+	} else if (tok[0].type == TOK_IDENTIFIER && tok[1].type == TOK_COLON) {
+		tok += 2;
+		st->type = AST_ST_LABELED_STATEMENT;
+		st->u.labeled_st.label = (const char *)tok[-2].value;
+		st->u.labeled_st.st = parse_statement(&tok);
+
 	} else if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
 		st->type = AST_ST_EXPRESSION;
 		st->u.opt_exp.exp = NULL;
@@ -667,8 +679,12 @@ static void free_ast_statement(struct ast_statement *st)
 		free_ast_statement(st->u._do.body);
 		free_ast_expression(st->u._do.condition);
 		break;
+	case AST_ST_LABELED_STATEMENT:
+		free_ast_statement(st->u.labeled_st.st);
+		break;
 	case AST_ST_BREAK:
 	case AST_ST_CONTINUE:
+	case AST_ST_GOTO:
 		break;
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);

@@ -130,6 +130,8 @@ struct ast_statement {
 		AST_ST_DO,
 		AST_ST_BREAK,
 		AST_ST_CONTINUE,
+		AST_ST_GOTO,
+		AST_ST_LABELED_STATEMENT,
 	} type;
 
 	union {
@@ -172,6 +174,15 @@ struct ast_statement {
 
 		struct token *continue_tok,
 			     *break_tok;
+
+		struct {
+			const char *label;
+		} _goto;
+
+		struct {
+			const char *label;
+			struct ast_statement *st;
+		} labeled_st;
 	} u;
 };
 

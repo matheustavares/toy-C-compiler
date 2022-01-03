@@ -220,6 +220,15 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		node = add_label(labels, xstrdup("<continue> keyword"));
 		break;
 
+	case AST_ST_GOTO:
+		node = add_label(labels, xmkstr("goto '%s'", st->u._goto.label));
+		break;
+	case AST_ST_LABELED_STATEMENT:
+		node = add_label(labels, xmkstr("label '%s'", st->u.labeled_st.label));
+		next_node = print_ast_statement(st->u.labeled_st.st, labels);
+		print_arc_label(node, next_node, "statement");
+		break;
+
 	default:
 		die("BUG: unknown ast statement type: %d", st->type);
 	}
