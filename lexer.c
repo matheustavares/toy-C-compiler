@@ -78,6 +78,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_DO_KW: return "<do> keyword";
 	case TOK_BREAK_KW: return "<break> keyword";
 	case TOK_CONTINUE_KW: return "<continue> keyword";
+	case TOK_GOTO_KW: return "<goto> keyword";
 
 	case TOK_IDENTIFIER: return "<identifier>";
 	case TOK_INTEGER: return "<integer>";
@@ -353,6 +354,10 @@ struct token *lex(const char *str)
 			str = aux - 1;
 		} else if (skip_prefix(str, "continue", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			add_token(TOK_CONTINUE_KW);
+			col_no += aux - 1 - str;
+			str = aux - 1;
+		} else if (skip_prefix(str, "goto", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
+			add_token(TOK_GOTO_KW);
 			col_no += aux - 1 - str;
 			str = aux - 1;
 		} else if (skip_one_char(str, IDENTIFIER_HEAD, &aux) &&
