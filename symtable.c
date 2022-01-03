@@ -5,11 +5,6 @@
 #include "parser.h"
 #include "lexer.h"
 
-static void plain_cpy(void **ptr_dst, void **ptr_src)
-{
-	*ptr_dst = *ptr_src;
-}
-
 static void sym_data_cpy(struct sym_data *dst, struct sym_data *src)
 {
 	/* We can do a shallow copy for now. */
@@ -19,7 +14,7 @@ static void sym_data_cpy(struct sym_data *dst, struct sym_data *src)
 void symtable_init(struct symtable *tab)
 {
 	memset(tab, 0, sizeof(*tab));
-	strmap_init(&tab->syms, plain_cpy);
+	strmap_init(&tab->syms, strmap_val_plain_copy);
 	tab->nr = tab->alloc = 0;
 	tab->data = NULL;
 }

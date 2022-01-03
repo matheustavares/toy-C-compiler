@@ -24,6 +24,12 @@ struct strmap {
 	strmap_val_cpy_fn val_cpy_fn;
 };
 
+/* A strmap_val_cpy_fn for shallow copying. */
+static void strmap_val_plain_copy(void **dst, void **src)
+{
+	*dst = *src;
+}
+
 #define INITIAL_TABLE_ALLOC 20
 void strmap_init_size(struct strmap *map, strmap_val_cpy_fn val_cpy_fn,
 		      size_t size);
