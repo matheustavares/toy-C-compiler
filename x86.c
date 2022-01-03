@@ -6,6 +6,7 @@
 #include "lexer.h"
 #include "lib/stack.h"
 #include "lib/strmap.h"
+#include "labelset.h"
 
 struct x86_ctx {
 	FILE *out;
@@ -29,13 +30,7 @@ struct x86_ctx {
 	struct stack continue_labels,
 		     break_labels;
 
-	/*
-	 * We store NULL if a label is used in a goto statement and a token
-	 * if it is used in a label definition. Thus, if we get to the end of
-	 * a function with NULL values, it means a label was used but not
-	 * defined.
-	 */
-	struct strmap user_labels;
+	struct labelset user_labels;
 };
 
 #define emit(ctx, ...) \
@@ -583,20 +578,15 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		break;
 	case AST_ST_LABELED_STATEMENT:
 		label = st->u.labeled_st.label;
-		if (strmap_find(&ctx->user_labels, label, (void **)&tok) && tok) {
-			die("generate x86: redefinition of label '%s'.\nFirst:\n%s\nThen:\n%s",
-			    label,
-			    show_token_on_source_line(tok),
-			    show_token_on_source_line(st->u.labeled_st.label_tok));
-		}
-		strmap_put(&ctx->user_labels, label, st->u.labeled_st.label_tok);
+		tok = st->u.labeled_st.label_tok;
+		labelset_put_definition(&ctx->user_labels, label, tok);
 		emit(ctx, "_label_%s:\n", label);
 		generate_statement(st->u.labeled_st.st, ctx);
 		break;
 	case AST_ST_GOTO:
 		label = st->u._goto.label;
-		if (!strmap_has(&ctx->user_labels, label))
-			strmap_put(&ctx->user_labels, label, NULL);
+		tok = st->u._goto.label_tok;
+		labelset_put_reference(&ctx->user_labels, label, tok);
 		emit(ctx, " jmp _label_%s\n", label);
 		break;
 
@@ -605,17 +595,9 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 	}
 }
 
-static int user_labels_check_defined(const char *label, void *val, void *_)
-{
-	if (!val)
-		/* TODO: save token and use show_token_on_source_line(). */
-		die("generate x86: unknown label '%s'.", label);
-	return 0;
-}
-
 static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
-	strmap_init(&ctx->user_labels, strmap_val_plain_copy);
+	labelset_init(&ctx->user_labels);
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
 
@@ -645,8 +627,8 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	stack_destroy(&ctx->break_labels, NULL);
 
 	/* Check if all refered labels were defined. */
-	strmap_iterate(&ctx->user_labels, user_labels_check_defined, NULL);
-	strmap_destroy(&ctx->user_labels);
+	labelset_check(&ctx->user_labels);
+	labelset_destroy(&ctx->user_labels);
 }
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)

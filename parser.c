@@ -533,6 +533,7 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 	} else if (check_and_pop_gently(&tok, TOK_GOTO_KW)) {
 		st->type = AST_ST_GOTO;
 		check_and_pop(&tok, TOK_IDENTIFIER);
+		st->u._goto.label_tok = &tok[-1];
 		st->u._goto.label = (const char *)tok[-1].value;
 		check_and_pop(&tok, TOK_SEMICOLON);
 

@@ -177,6 +177,7 @@ struct ast_statement {
 
 		struct {
 			const char *label;
+			struct token *label_tok;
 		} _goto;
 
 		struct {
