@@ -11,6 +11,7 @@ enum token_type {
 	TOK_SEMICOLON,
 	TOK_COLON,
 	TOK_QUESTION_MARK,
+	TOK_COMMA,
 
 	/* keywords */
 	TOK_INT_KW,

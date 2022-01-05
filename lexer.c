@@ -203,6 +203,8 @@ struct token *lex(const char *str)
 			add_token(TOK_COLON);
 		} else if (*str == '?') {
 			add_token(TOK_QUESTION_MARK);
+		} else if (*str == ',') {
+			add_token(TOK_COMMA);
 
 		} else if (skip_prefix(str, "+=", &aux)) {
 			add_token(TOK_PLUS_ASSIGNMENT);
