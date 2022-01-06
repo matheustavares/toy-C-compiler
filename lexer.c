@@ -82,7 +82,7 @@ const char *tt2str(enum token_type tt)
 
 	case TOK_IDENTIFIER: return "<identifier>";
 	case TOK_INTEGER: return "<integer>";
-	
+
 	case TOK_MINUS: return "-";
 	case TOK_TILDE: return "~";
 	case TOK_PLUS: return "+";
@@ -95,7 +95,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_BITWISE_LEFT_SHIFT: return "<<";
 	case TOK_BITWISE_RIGHT_SHIFT: return ">>";
 	case TOK_ASSIGNMENT: return "=";
-	
+
 	case TOK_LOGIC_NOT: return "!";
 	case TOK_LOGIC_AND: return "&&";
 	case TOK_LOGIC_OR: return "||";
@@ -152,240 +152,244 @@ void free_token(struct token *t)
 	free((char *)t->line);
 }
 
+struct lex_ctx {
+	struct token *tokens;
+	size_t alloc, nr;
+
+	const char *buf, *line_start;
+	size_t line_no, col_no;
+};
+
+#define LEX_CTX_INIT(buffer) \
+	{ .line_no = 1, .buf = (buffer), .line_start = (buffer) }
+
+static void add_token_with_value(struct lex_ctx *ctx, enum token_type type,
+				 void *value)
+{
+	ALLOC_GROW(ctx->tokens, ctx->nr + 1, ctx->alloc);
+	struct token *tok = &ctx->tokens[ctx->nr++];
+	tok->type = type;
+	tok->value = value;
+	 /* TODO: it's wasteful to dup the line for evert token in it. */
+	tok->line = tab2sp(getline_dup(ctx->line_start), 1);
+	tok->line_no = ctx->line_no;
+	tok->col_no = ctx->col_no;
+}
+
+#define add_token(ctx, type) add_token_with_value(ctx, type, NULL)
+
+static int consume_str(struct lex_ctx *ctx, const char *needle, enum token_type type)
+{
+	const char *aux;
+	if (skip_prefix(ctx->buf, needle, &aux)) {
+		add_token(ctx, type);
+		ctx->col_no += aux - ctx->buf;
+		ctx->buf = aux;
+		return 1;
+	}
+	return 0;
+}
+
+static int consume_char(struct lex_ctx *ctx, char needle, enum token_type type)
+{
+	if (*ctx->buf == needle) {
+		add_token(ctx, type);
+		(ctx->col_no)++;
+		(ctx->buf)++;
+		return 1;
+	}
+	return 0;
+}
+
+static int consume_keyword(struct lex_ctx *ctx, char *needle, enum token_type type)
+{
+	const char *aux;
+	if (skip_prefix(ctx->buf, needle, &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
+		add_token(ctx, type);
+		ctx->col_no += aux - ctx->buf;
+		ctx->buf = aux;
+		return 1;
+	}
+	return 0;
+}
+
+static int consume_newline(struct lex_ctx *ctx)
+{
+	if (*ctx->buf == '\n') {
+		ctx->line_start = ++(ctx->buf);
+		ctx->line_no++;
+		ctx->col_no = 0;
+		return 1;
+	}
+	return 0;
+}
+
+static int consume_whitespaces(struct lex_ctx *ctx)
+{
+	int ret = 0;
+	while (char_in(*ctx->buf, WHITESPACE)) {
+		ret = 1;
+		if (consume_newline(ctx)) {
+			;
+		} else {
+			ctx->col_no++;
+			ctx->buf++;
+		}
+	}
+	return ret;
+}
 
 struct token *lex(const char *str)
 {
-	struct token *tokens = NULL;
-	size_t alloc = 0, nr = 0;
-	const char *line_start = str;
-	size_t line_no = 1, col_no = 0;
+	struct lex_ctx ctx = LEX_CTX_INIT(str);
 
-#define add_token_with_value(t, v) \
-	do { \
-		ALLOC_GROW(tokens, nr + 1, alloc); \
-		tokens[nr].type = t; \
-		tokens[nr].value = v; \
-		 /* TODO: it's wasteful to dup the line for evert token in it. */ \
-		tokens[nr].line = tab2sp(getline_dup(line_start), 1); \
-		tokens[nr].line_no = line_no; \
-		tokens[nr].col_no = col_no; \
-		nr++; \
-	} while (0)
-
-#define add_token(t) add_token_with_value(t, NULL)
-
-	for (; *str; str++, col_no++) {
-		while (char_in(*str, " \t")) {
-			str++; col_no++;
-		}
-		if (!*str)
-			break;
-		if (*str == '\n') {
-			line_start = str + 1;
-			line_no++;
-			col_no = -1; /* Adjust for the loop's 'col_no++' */
-			continue;
-		}
-
+	while (*ctx.buf) {
 		const char *aux;
 
-		if (*str == '{') {
-			add_token(TOK_OPEN_BRACE);
-		} else if (*str == '}') {
-			add_token(TOK_CLOSE_BRACE);
-		} else if (*str == '(') {
-			add_token(TOK_OPEN_PAR);
-		} else if (*str == ')') {
-			add_token(TOK_CLOSE_PAR);
-		} else if (*str == ';') {
-			add_token(TOK_SEMICOLON);
-		} else if (*str == ':') {
-			add_token(TOK_COLON);
-		} else if (*str == '?') {
-			add_token(TOK_QUESTION_MARK);
-		} else if (*str == ',') {
-			add_token(TOK_COMMA);
+		if (consume_whitespaces(&ctx))
+			;
 
-		} else if (skip_prefix(str, "+=", &aux)) {
-			add_token(TOK_PLUS_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "-=", &aux)) {
-			add_token(TOK_MINUS_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "/=", &aux)) {
-			add_token(TOK_SLASH_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "*=", &aux)) {
-			add_token(TOK_STAR_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "%=", &aux)) {
-			add_token(TOK_MODULO_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "&=", &aux)) {
-			add_token(TOK_BITWISE_AND_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "|=", &aux)) {
-			add_token(TOK_BITWISE_OR_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "^=", &aux)) {
-			add_token(TOK_BITWISE_XOR_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "<<=", &aux)) {
-			add_token(TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, ">>=", &aux)) {
-			add_token(TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
+		else if (consume_char(&ctx, '{', TOK_OPEN_BRACE))
+			;
+		else if (consume_char(&ctx, '}', TOK_CLOSE_BRACE))
+			;
+		else if (consume_char(&ctx, '(', TOK_OPEN_PAR))
+			;
+		else if (consume_char(&ctx, ')', TOK_CLOSE_PAR))
+			;
+		else if (consume_char(&ctx, ';', TOK_SEMICOLON))
+			;
+		else if (consume_char(&ctx, ':', TOK_COLON))
+			;
+		else if (consume_char(&ctx, '?', TOK_QUESTION_MARK))
+			;
+		else if (consume_char(&ctx, ',', TOK_COMMA))
+			;
 
-		} else if (skip_prefix(str, "++", &aux)) {
-			add_token(TOK_PLUS_PLUS);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "--", &aux)) {
-			add_token(TOK_MINUS_MINUS);
-			col_no += aux - 1 - str;
-			str = aux - 1;
+		else if (consume_str(&ctx, "+=", TOK_PLUS_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "-=", TOK_MINUS_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "/=", TOK_SLASH_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "*=", TOK_STAR_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "%=", TOK_MODULO_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "&=", TOK_BITWISE_AND_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "|=", TOK_BITWISE_OR_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "^=", TOK_BITWISE_XOR_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, "<<=", TOK_BITWISE_LEFT_SHIFT_ASSIGNMENT))
+			;
+		else if (consume_str(&ctx, ">>=", TOK_BITWISE_RIGHT_SHIFT_ASSIGNMENT))
+			;
 
-		} else if (*str == '-') {
-			add_token(TOK_MINUS);
-		} else if (*str == '~') {
-			add_token(TOK_TILDE);
-		} else if (*str == '+') {
-			add_token(TOK_PLUS);
-		} else if (*str == '*') {
-			add_token(TOK_STAR);
-		} else if (*str == '/') {
-			add_token(TOK_F_SLASH);
-		} else if (*str == '%') {
-			add_token(TOK_MODULO);
-		} else if (*str == '^') {
-			add_token(TOK_BITWISE_XOR);
+		else if (consume_str(&ctx, "++", TOK_PLUS_PLUS))
+			;
+		else if (consume_str(&ctx, "--", TOK_MINUS_MINUS))
+			;
 
-		} else if (skip_prefix(str, "&&", &aux)) {
-			add_token(TOK_LOGIC_AND);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "||", &aux)) {
-			add_token(TOK_LOGIC_OR);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "==", &aux)) {
-			add_token(TOK_EQUAL);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "!=", &aux)) {
-			add_token(TOK_NOT_EQUAL);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "<=", &aux)) {
-			add_token(TOK_LE);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, ">=", &aux)) {
-			add_token(TOK_GE);
-			col_no += aux - 1 - str;
-			str = aux - 1;
+		else if (consume_char(&ctx, '-', TOK_MINUS))
+			;
+		else if (consume_char(&ctx, '~', TOK_TILDE))
+			;
+		else if (consume_char(&ctx, '+', TOK_PLUS))
+			;
+		else if (consume_char(&ctx, '*', TOK_STAR))
+			;
+		else if (consume_char(&ctx, '/', TOK_F_SLASH))
+			;
+		else if (consume_char(&ctx, '%', TOK_MODULO))
+			;
+		else if (consume_char(&ctx, '^', TOK_BITWISE_XOR))
+			;
 
-		} else if (skip_prefix(str, "<<", &aux)) {
-			add_token(TOK_BITWISE_LEFT_SHIFT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, ">>", &aux)) {
-			add_token(TOK_BITWISE_RIGHT_SHIFT);
-			col_no += aux - 1 - str;
-			str = aux - 1;
+		else if (consume_str(&ctx, "&&", TOK_LOGIC_AND))
+			;
+		else if (consume_str(&ctx, "||", TOK_LOGIC_OR))
+			;
+		else if (consume_str(&ctx, "==", TOK_EQUAL))
+			;
+		else if (consume_str(&ctx, "!=", TOK_NOT_EQUAL))
+			;
+		else if (consume_str(&ctx, "<=", TOK_LE))
+			;
+		else if (consume_str(&ctx, ">=", TOK_GE))
+			;
+
+		else if (consume_str(&ctx, "<<", TOK_BITWISE_LEFT_SHIFT))
+			;
+		else if (consume_str(&ctx, ">>", TOK_BITWISE_RIGHT_SHIFT))
+			;
 
 		/* These must come after ">*", "<*", and "*=*" tokens. */
-		} else if (*str == '>') {
-			add_token(TOK_GT);
-		} else if (*str == '<') {
-			add_token(TOK_LT);
-		} else if (*str == '!') {
-			add_token(TOK_LOGIC_NOT);
-		} else if (*str == '=') {
-			add_token(TOK_ASSIGNMENT);
+		else if (consume_char(&ctx, '>', TOK_GT))
+			;
+		else if (consume_char(&ctx, '<', TOK_LT))
+			;
+		else if (consume_char(&ctx, '!', TOK_LOGIC_NOT))
+			;
+		else if (consume_char(&ctx, '=', TOK_ASSIGNMENT))
+			;
 
 		/* These must come after "&*" and "|*" tokens. */
-		} else if (*str == '&') {
-			add_token(TOK_BITWISE_AND);
-		} else if (*str == '|') {
-			add_token(TOK_BITWISE_OR);
+		else if (consume_char(&ctx, '&', TOK_BITWISE_AND))
+			;
+		else if (consume_char(&ctx, '|', TOK_BITWISE_OR))
+			;
 
+		else if (consume_keyword(&ctx, "int", TOK_INT_KW))
+			;
+		else if (consume_keyword(&ctx, "return", TOK_RETURN_KW))
+			;
+		else if (consume_keyword(&ctx, "if", TOK_IF_KW))
+			;
+		else if (consume_keyword(&ctx, "else", TOK_ELSE_KW))
+			;
+		else if (consume_keyword(&ctx, "for", TOK_FOR_KW))
+			;
+		else if (consume_keyword(&ctx, "while", TOK_WHILE_KW))
+			;
+		else if (consume_keyword(&ctx, "do", TOK_DO_KW))
+			;
+		else if (consume_keyword(&ctx, "break", TOK_BREAK_KW))
+			;
+		else if (consume_keyword(&ctx, "continue", TOK_CONTINUE_KW))
+			;
+		else if (consume_keyword(&ctx, "goto", TOK_GOTO_KW))
+			;
 
-		} else if (skip_prefix(str, "int", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_INT_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "return", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_RETURN_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "if", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_IF_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "else", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_ELSE_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "for", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_FOR_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "while", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_WHILE_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "do", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_DO_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "break", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_BREAK_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "continue", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_CONTINUE_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_prefix(str, "goto", &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token(TOK_GOTO_KW);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_one_char(str, IDENTIFIER_HEAD, &aux) &&
-			   skip_chars(str, IDENTIFIER_TAIL, &aux) &&
+		else if (skip_one_char(ctx.buf, IDENTIFIER_HEAD, &aux) &&
+			   skip_chars(ctx.buf, IDENTIFIER_TAIL, &aux) &&
 			   !char_in(*aux, IDENTIFIER_TAIL)) {
-			add_token_with_value(TOK_IDENTIFIER, xstrndup(str, aux - str));
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else if (skip_chars(str, NUM, &aux) && !char_in(*aux, ALPHA)) {
+			add_token_with_value(&ctx, TOK_IDENTIFIER, xstrndup(ctx.buf, aux - ctx.buf));
+			ctx.col_no += aux - ctx.buf;
+			ctx.buf = aux;
+		}
+
+		else if (skip_chars(ctx.buf, NUM, &aux) && !char_in(*aux, IDENTIFIER_TAIL)) {
 			int *val = xmalloc(sizeof(*val));
-			*val = strtol(str, NULL, 10);
-			add_token_with_value(TOK_INTEGER, val);
-			col_no += aux - 1 - str;
-			str = aux - 1;
-		} else {
-			size_t i;
-			for (i = 0; str[i] && !char_in(str[i], WHITESPACE); i++)
-				;
-			die("lex error: unknown token '%s'\n%s", xstrndup(str, i),
-			    show_on_source_line(tab2sp(getline_dup(line_start), 1),
-						line_no, col_no));
+			*val = strtol(ctx.buf, NULL, 10);
+			add_token_with_value(&ctx, TOK_INTEGER, val);
+			ctx.col_no += aux - ctx.buf;
+			ctx.buf = aux;
+		}
+
+		else {
+			size_t i = 0;
+			while (ctx.buf[i] && !char_in(ctx.buf[i], WHITESPACE))
+				i++;
+			die("lex error: unknown token '%s'\n%s", xstrndup(ctx.buf, i),
+			    show_on_source_line(tab2sp(getline_dup(ctx.line_start), 1),
+						ctx.line_no, ctx.col_no));
 		}
 	}
-	add_token(TOK_NONE); /* sentinel */
-	REALLOC_ARRAY(tokens, nr); /* trim excess. */
-	return tokens;
+	add_token(&ctx, TOK_NONE); /* sentinel */
+	REALLOC_ARRAY(ctx.tokens, ctx.nr); /* trim excess. */
+	return ctx.tokens;
 }
 
 void free_tokens(struct token *toks)
