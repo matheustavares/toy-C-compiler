@@ -239,6 +239,49 @@ static int consume_whitespaces(struct lex_ctx *ctx)
 	return ret;
 }
 
+static int consume_comments(struct lex_ctx *ctx)
+{
+	/* Single-line comments. */
+	if (*ctx->buf == '/' && *(ctx->buf + 1) == '/') {
+		ctx->buf += 2;
+		ctx->col_no += 2;
+		while (*ctx->buf && *ctx->buf != '\n') {
+			ctx->buf++;
+			ctx->col_no++;
+		}
+		return 1;
+	}
+
+	/* Multi-line comments. */
+	if (*ctx->buf == '/' && *(ctx->buf + 1) == '*') {
+		const char *comment_line_start = ctx->line_start;
+		size_t comment_line_no = ctx->line_no,
+		       comment_col_no = ctx->col_no;
+		ctx->buf += 2;
+		ctx->col_no += 2;
+		while (1) {
+			if (*ctx->buf == '*' && *(ctx->buf + 1) == '/') {
+				ctx->buf += 2;
+				ctx->col_no += 2;
+				break;
+			} else if (consume_newline(ctx)) {
+				continue;
+			} else if (!*ctx->buf) {
+				die("lexer error: runaway comment block.\n%s",
+				    show_on_source_line(
+					tab2sp(getline_dup(comment_line_start), 1),
+					comment_line_no, comment_col_no));
+			} else {
+				ctx->buf++;
+				ctx->col_no++;
+			}
+		}
+		return 1;
+	}
+
+	return 0;
+}
+
 struct token *lex(const char *str)
 {
 	struct lex_ctx ctx = LEX_CTX_INIT(str);
@@ -247,6 +290,8 @@ struct token *lex(const char *str)
 		const char *aux;
 
 		if (consume_whitespaces(&ctx))
+			;
+		else if (consume_comments(&ctx))
 			;
 
 		else if (consume_char(&ctx, '{', TOK_OPEN_BRACE))

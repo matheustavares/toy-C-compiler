@@ -6,7 +6,8 @@ MAIN = cc
 HEADERS = $(wildcard *.h lib/*.h)
 SRCS = $(wildcard *.c lib/*.c)
 STAGES ?= 1 2 3 4 5 6 7 8 \
-	  4-more-binary-ops 5-compound-assignment goto complex_identifiers
+	  4-more-binary-ops 5-compound-assignment goto complex_identifiers \
+	  comments
 
 OBJS_DIR = objs
 OBJS = $(addprefix $(OBJS_DIR)/,$(filter-out $(MAIN).o,$(SRCS:.c=.o)))
