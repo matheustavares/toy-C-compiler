@@ -493,7 +493,11 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	}
 	/*
 	 * TODO: investigate if should push rax (and increment
-	 * stack_index by 8) or eax (and increment by 4).
+	 * stack_index by 8) or do something like:
+	 *	add $4, %rsp
+	 *	mov %eax, %rsp
+	 * And increment stack_index by 4. Note that we can't
+	 * push eax on x86_64.
 	 */
 	emit(ctx, " push	%%rax\n");
 	ctx->stack_index += 8;
