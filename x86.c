@@ -283,7 +283,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		case EXP_OP_SUFFIX_INC:
 			assert(un_op_val->type == AST_EXP_VAR);
 			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
-			emit(ctx, " add	$1, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " addq	$1, -%zu(%%rbp)\n", stack_index);
 			break;
 		case EXP_OP_SUFFIX_DEC:
 			assert(un_op_val->type == AST_EXP_VAR);
