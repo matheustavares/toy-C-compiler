@@ -588,7 +588,10 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 			check_and_pop(&tok, TOK_COMMA);
 		check_and_pop(&tok, TOK_INT_KW);
 		check_and_pop(&tok, TOK_IDENTIFIER);
-		ARRAY_APPEND(&fun->parameters, xstrdup((char *)tok[-1].value));
+		struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+		decl->name = xstrdup((char *)tok[-1].value);
+		decl->tok = &tok[-1];
+		ARRAY_APPEND(&fun->parameters, decl);
 		is_first_parameter = 0;
 	}
 
@@ -726,7 +729,7 @@ static void free_ast_func_decl(struct ast_func_decl *fun)
 		free_ast_statement(fun->body);
 	free((char *)fun->name);
 	for (size_t i = 0; i < fun->parameters.nr; i++)
-		free((char *)fun->parameters.arr[i]);
+		free_ast_var_decl(fun->parameters.arr[i]);
 	FREE_ARRAY(&fun->parameters);
 	free(fun);
 }

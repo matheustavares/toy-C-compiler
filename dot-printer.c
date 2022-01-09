@@ -248,7 +248,7 @@ static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *
 {
 	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
 	for (size_t i = 0; i < fun->parameters.nr; i++) {
-		size_t next_node = add_label(labels, xstrdup(fun->parameters.arr[i]));
+		size_t next_node = add_label(labels, xstrdup(fun->parameters.arr[i]->name));
 		char *parameter = xmkstr("parameter %zu", i);
 		print_arc_label(node, next_node, parameter);
 		free(parameter);

@@ -8,6 +8,13 @@
 #include "lib/strmap.h"
 #include "labelset.h"
 
+/* 
+ * In argument order. That is, first arg goes on rdi, second on rsi, and so on.
+ * Sixth arg and beyond goes on stack.
+ */
+const char *func_call_regs[] = { "rdi", "rsi", "rdx", "rcx", "r8", "r9" };
+#define NR_CALL_REGS (sizeof(func_call_regs) / sizeof(*func_call_regs))
+
 struct x86_ctx {
 	FILE *out;
 	struct symtable *symtable;
@@ -301,6 +308,33 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
 		emit(ctx, " mov	-%zu(%%rbp), %%rax\n", stack_index);
 		break;
+	case AST_EXP_FUNC_CALL:
+		/*
+		 * We first push all arguments into the stack and then move the
+		 * register ones out. This is to avoid putting an argument in
+		 * a register which may end up getting used by the next
+		 * generate_expression() call.
+		 *
+		 * Note the ssize_t usage to avoid an unsigned overflow with
+		 * i-- when i is 0.
+		 */
+		for (ssize_t i = exp->u.call.args.nr - 1; i >= 0; i--) {
+			generate_expression(exp->u.call.args.arr[i], ctx);
+			emit(ctx, " push	%%rax\n");
+		}
+		for (size_t i = 0; i < MIN(NR_CALL_REGS, exp->u.call.args.nr); i++)
+			emit(ctx, " pop	%%%s\n", func_call_regs[i]);
+		/* 
+		 * No need to save any register as we hold all variables at
+		 * the stack. So the callee can use all registers as it wants.
+		 */
+		emit(ctx, " call	%s\n", exp->u.call.name);
+		/* Remove the stack arguments. */
+		size_t stack_args = exp->u.call.args.nr > NR_CALL_REGS ?
+				    exp->u.call.args.nr - NR_CALL_REGS : 0;
+		if (stack_args)
+			emit(ctx, " add	$%zu, %%rsp\n", stack_args * 8);
+		break;
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
 	}
@@ -353,7 +387,8 @@ static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
 }
 
 static void generate_new_scope(struct ast_statement *st, struct x86_ctx *ctx,
-	       void (*generator)(struct ast_statement *st, struct x86_ctx *ctx))
+		void (*generator)(struct ast_statement *st, struct x86_ctx *ctx, void *data),
+		void *data)
 {
 	struct symtable *cpy, *saved_symtable;
 	unsigned int saved_scope = ctx->scope++;
@@ -364,13 +399,13 @@ static void generate_new_scope(struct ast_statement *st, struct x86_ctx *ctx,
 	saved_symtable = ctx->symtable;
 	ctx->symtable = cpy;
 
-	generator(st, ctx);
+	generator(st, ctx, data);
 
 	/* 
 	 * Deallocate block variables. Alternatively, we could do:  
 	 * rsp = rbp - (saved_stack_index  + 8);
 	 */
-	emit(ctx, " add $%zu, %%rsp\n",
+	emit(ctx, " add	$%zu, %%rsp\n",
 		symtable_bytes_in_scope(ctx->symtable, ctx->scope));
 
 	ctx->scope = saved_scope;
@@ -381,14 +416,15 @@ static void generate_new_scope(struct ast_statement *st, struct x86_ctx *ctx,
 }
 
 static void block_statement_generator(struct ast_statement *st,
-				      struct x86_ctx *ctx)
+				      struct x86_ctx *ctx,
+				      void *unused)
 {
 	assert(st->type == AST_ST_BLOCK);
 	for (size_t i = 0; i < st->u.block.nr; i++)
 		generate_statement(st->u.block.items[i], ctx);
 }
 #define generate_statement_block(st, ctx) \
-	generate_new_scope(st, ctx, block_statement_generator)
+	generate_new_scope(st, ctx, block_statement_generator, NULL)
 
 static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 {
@@ -503,7 +539,8 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	ctx->stack_index += 8;
 }
 
-static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
+static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
+			       void *unused)
 {
 	static unsigned long counter = 0;
 	char *label_condition = xmkstr("_for_decl_condition_%lu", counter);
@@ -532,7 +569,7 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx)
 	free(label_epilogue);
 }
 #define generate_for_decl(st, ctx) \
-	generate_new_scope(st, ctx, for_decl_generator)
+	generate_new_scope(st, ctx, for_decl_generator, NULL)
 
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 {
@@ -599,18 +636,55 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 	}
 }
 
+static void func_body_generator(struct ast_statement *st,
+				struct x86_ctx *ctx,
+				void *data)
+{
+	ARRAY(struct ast_var_decl *) *parameters = data;
+	/* First we save the arguments. */
+	for (size_t i = 0; i < parameters->nr; i++) {
+		if (i < NR_CALL_REGS) {
+			emit(ctx, " push	%%%s\n", func_call_regs[i]);
+		} else {
+			/*
+			 * The NR_CALL_REGS-th argument is 16 positions above
+			 * rbp: 8 bytes are used for the return address and
+			 * another 8 to save the previous rbp (function
+			 * prologue). Subsequent ones are above it (remember:
+			 * the stack grows down, i.e., to lower addresses).
+			 */
+			emit(ctx, " pushq	%zu(%%rbp)\n",
+			     16 + (i - NR_CALL_REGS) * 8);
+		}
+		symtable_put_lvar(ctx->symtable, parameters->arr[i],
+				  ctx->stack_index, ctx->scope);
+		ctx->stack_index += 8;
+	}
+
+	/* Then we generate the body. */
+	assert(st->type == AST_ST_BLOCK);
+	for (size_t i = 0; i < st->u.block.nr; i++)
+		generate_statement(st->u.block.items[i], ctx);
+}
+#define generate_func_body(func, ctx) \
+	generate_new_scope((func)->body, ctx, func_body_generator, &(func)->parameters)
+
 static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
 	labelset_init(&ctx->user_labels);
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
 
-	/* prologue: save previous rbp and create an empty stack frame. */
+	/*
+	 * prologue: save previous rbp and create an empty stack frame.
+	 * Note: callee should also save and restore RBX and R12-R15, but we
+	 * never use these registers, so there is no need to save them. 
+	 */
 	emit(ctx, " push	%%rbp\n");
 	emit(ctx, " mov	%%rsp, %%rbp\n");
 	ctx->stack_index = 8; /* sizeof(%rbp) */
 
-	generate_statement_block(fun->body, ctx);
+	generate_func_body(fun, ctx);
 	/*
 	 * If the function is missing a return statement, and it is
 	 * the main() function, it should return 0. If it is not

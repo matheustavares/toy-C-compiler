@@ -198,7 +198,7 @@ struct ast_statement {
 
 struct ast_func_decl {
 	const char *name;
-	ARRAY(const char *) parameters; /* All type int */
+	ARRAY(struct ast_var_decl *) parameters;
 	/*
 	 * Optional. If present, must be of type AST_ST_BLOCK.
 	 * (Enforced by parser.c)
