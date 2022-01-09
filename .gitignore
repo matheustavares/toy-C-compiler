@@ -1,3 +1,5 @@
 *.o
 cc
 tags
+.MAKE-CFLAGS
+.MAKE-LDFLAGS
