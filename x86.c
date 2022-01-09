@@ -13,14 +13,14 @@ struct x86_ctx {
 	struct symtable *symtable;
 	/*
 	 * Local variables are stored in the stack with a position relative to
-	 * %rpb. The first available "spot" for a local variable in a function
-	 * is "%rpb - 8" because the stack frame is initialized with the
-	 * previous %rpb value (which occupies the first 8 bytes).
+	 * %rbp. The first available "spot" for a local variable in a function
+	 * is "%rbp - 8" because the stack frame is initialized with the
+	 * previous %rbp value (which occupies the first 8 bytes).
 	 *
-	 * The stack_index stores what is the next offset (relative to %rpb) to
+	 * The stack_index stores what is the next offset (relative to %rbp) to
 	 * store a local variable. Remember that the stack grows "down", so
 	 * even though we store unsigned size_t, the address should be
-	 * interpreted as "%rpb - stack_index";
+	 * interpreted as "%rbp - stack_index";
 	 *
 	 * This is *only* valid inside function generation, and should be
 	 * 0 otherwise.
