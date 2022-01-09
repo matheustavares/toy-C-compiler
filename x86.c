@@ -633,7 +633,11 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 {
-	generate_func_decl(prog->fun, ctx);
+	for (size_t i = 0; i < prog->funcs.nr; i++) {
+		struct ast_func_decl *fun = prog->funcs.arr[i];
+		if (fun->body)
+			generate_func_decl(fun, ctx);
+	}
 }
 
 static const char *x86_out_filename;

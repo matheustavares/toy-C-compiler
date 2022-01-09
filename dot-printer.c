@@ -118,6 +118,15 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 	case AST_EXP_VAR:
 		node = add_label(labels, xmkstr("Variable '%s'", exp->u.var.name));
 		break;
+	case AST_EXP_FUNC_CALL:
+		node = add_label(labels, xmkstr("Call '%s'", exp->u.call.name));
+		for (size_t i = 0; i < exp->u.call.args.nr; i++) {
+			next_node = print_ast_expression(exp->u.call.args.arr[i], labels);
+			char *arg = xmkstr("arg %zu", i);
+			print_arc_label(node, next_node, arg);
+			free(arg);
+		}
+		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
 	}
@@ -238,16 +247,26 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
 	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
-	size_t next_node = print_ast_statement(fun->body, labels);
-	print_arc(node, next_node);
+	for (size_t i = 0; i < fun->parameters.nr; i++) {
+		size_t next_node = add_label(labels, xstrdup(fun->parameters.arr[i]));
+		char *parameter = xmkstr("parameter %zu", i);
+		print_arc_label(node, next_node, parameter);
+		free(parameter);
+	}
+	if (fun->body) {
+		size_t next_node = print_ast_statement(fun->body, labels);
+		print_arc_label(node, next_node, "body");
+	}
 	return node;
 }
 
 static void print_ast_program(struct ast_program *prog, struct label_list *labels)
 {
 	size_t node = add_label(labels, xstrdup("Program"));
-	size_t next_node = print_ast_func_decl(prog->fun, labels);
-	print_arc(node, next_node);
+	for (size_t i = 0; i < prog->funcs.nr; i++) {
+		size_t next_node = print_ast_func_decl(prog->funcs.arr[i], labels);
+		print_arc(node, next_node);
+	}
 }
 
 void print_ast_in_dot(struct ast_program *prog)

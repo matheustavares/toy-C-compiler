@@ -1,6 +1,8 @@
 #ifndef _PARSER_H
 #define _PARSER_H
 
+#include "lib/array.h"
+
 struct token;
 
 /*
@@ -33,6 +35,7 @@ struct ast_expression {
 		AST_EXP_BINARY_OP,
 		AST_EXP_VAR,
 		AST_EXP_TERNARY,
+		AST_EXP_FUNC_CALL,
 	} type;
 
 	union {
@@ -99,6 +102,11 @@ struct ast_expression {
 					      *if_exp,
 					      *else_exp;
 		} ternary;
+
+		struct {
+			const char *name;
+			ARRAY(struct ast_expression *) args;
+		} call;
 	} u;
 };
 
@@ -190,12 +198,16 @@ struct ast_statement {
 
 struct ast_func_decl {
 	const char *name;
-	/* Must be of type AST_ST_BLOCK. (Enforced by parser.c) */
+	ARRAY(const char *) parameters; /* All type int */
+	/*
+	 * Optional. If present, must be of type AST_ST_BLOCK.
+	 * (Enforced by parser.c)
+	 */
 	struct ast_statement *body;
 };
 
 struct ast_program {
-	struct ast_func_decl *fun;
+	ARRAY(struct ast_func_decl *) funcs;
 };
 
 struct ast_program *parse_program(struct token *toks);

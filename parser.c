@@ -97,6 +97,19 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 	} else if (tok[-1].type == TOK_OPEN_PAR) {
 		exp = parse_exp(&tok);
 		check_and_pop(&tok, TOK_CLOSE_PAR);
+	} else if (tok[-1].type == TOK_IDENTIFIER && check_and_pop_gently(&tok, TOK_OPEN_PAR)) {
+		exp = xmalloc(sizeof(*exp));
+		exp->type = AST_EXP_FUNC_CALL;
+		exp->u.call.name = xstrdup((char *)tok[-2].value);
+		ARRAY_INIT(&exp->u.call.args);
+		int is_first_parameter = 1;
+		while (tok->type != TOK_CLOSE_PAR) {
+			if (!is_first_parameter)
+				check_and_pop(&tok, TOK_COMMA);
+			ARRAY_APPEND(&exp->u.call.args, parse_exp(&tok));
+			is_first_parameter = 0;
+		}
+		check_and_pop(&tok, TOK_CLOSE_PAR);
 	} else if (tok[-1].type == TOK_IDENTIFIER) {
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_VAR;
@@ -116,13 +129,6 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 		exp->u.un_op.type = op_tok->type == TOK_PLUS_PLUS ?
 			EXP_OP_PREFIX_INC : EXP_OP_PREFIX_DEC;
 	} else {
-		/*
-		 * TODO: considering unary operators as part of the atom only
-		 * works now because our unary operators have the highest
-		 * precedence among all implemented operators. But if we add
-		 * "->", ".", "++", "() (function call)" or others with a
-		 * higher precedence, we must take care.
-		 */
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_UNARY_OP;
 		exp->u.un_op.type = tt2un_op_type(tok[-1].type);
@@ -574,8 +580,23 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_IDENTIFIER);
 	fun->name = xstrdup((char *)tok[-1].value);
 	check_and_pop(&tok, TOK_OPEN_PAR);
+
+	ARRAY_INIT(&fun->parameters);
+	int is_first_parameter = 1;
+	while (tok->type != TOK_CLOSE_PAR) {
+		if (!is_first_parameter)
+			check_and_pop(&tok, TOK_COMMA);
+		check_and_pop(&tok, TOK_INT_KW);
+		check_and_pop(&tok, TOK_IDENTIFIER);
+		ARRAY_APPEND(&fun->parameters, xstrdup((char *)tok[-1].value));
+		is_first_parameter = 0;
+	}
+
 	check_and_pop(&tok, TOK_CLOSE_PAR);
-	fun->body = parse_statement_block(&tok);
+	if (check_and_pop_gently(&tok, TOK_SEMICOLON))
+		fun->body = NULL;
+	else
+		fun->body = parse_statement_block(&tok);
 
 	*tok_ptr = tok;
 	return fun;
@@ -584,11 +605,10 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 struct ast_program *parse_program(struct token *toks)
 {
 	struct ast_program *prog = xmalloc(sizeof(*prog));
-	prog->fun = parse_func_decl(&toks);
+	ARRAY_INIT(&prog->funcs);
 
-	if (!end_token(toks))
-		die("parser: expecting EOF got %s\n%s",
-		    tok2str(toks), show_token_on_source_line(toks));
+	while (!end_token(toks))
+		ARRAY_APPEND(&prog->funcs, parse_func_decl(&toks));
 
 	return prog;
 }
@@ -617,6 +637,12 @@ static void free_ast_expression(struct ast_expression *exp)
 		break;
 	case AST_EXP_VAR:
 		free((char *)exp->u.var.name);
+		break;
+	case AST_EXP_FUNC_CALL:
+		free((char *)exp->u.call.name);
+		for (size_t i = 0; i < exp->u.call.args.nr; i++)
+			free_ast_expression(exp->u.call.args.arr[i]);
+		FREE_ARRAY(&exp->u.call.args);
 		break;
 	default:
 		die("BUG: unknown ast expression type: %d", exp->type);
@@ -696,14 +722,20 @@ static void free_ast_statement(struct ast_statement *st)
 
 static void free_ast_func_decl(struct ast_func_decl *fun)
 {
-	free_ast_statement(fun->body);
+	if (fun->body)
+		free_ast_statement(fun->body);
 	free((char *)fun->name);
+	for (size_t i = 0; i < fun->parameters.nr; i++)
+		free((char *)fun->parameters.arr[i]);
+	FREE_ARRAY(&fun->parameters);
 	free(fun);
 }
 
 static void free_ast_program(struct ast_program *prog)
 {
-	free_ast_func_decl(prog->fun);
+	for (size_t i = 0; i < prog->funcs.nr; i++)
+		free_ast_func_decl(prog->funcs.arr[i]);
+	FREE_ARRAY(&prog->funcs);
 	free(prog);
 }
 

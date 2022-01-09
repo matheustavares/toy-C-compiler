@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include "error.h"
 #include "wrappers.h"
+#include "array.h"
 
 static char *getline_dup(const char *str)
 {

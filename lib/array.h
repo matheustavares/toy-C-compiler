@@ -115,4 +115,21 @@ static inline size_t st_mult(size_t a, size_t b)
 		} \
 	} while (0)
 
+
+#define ARRAY(type) \
+	struct { \
+		type *arr; \
+		size_t nr, alloc; \
+	}
+
+#define ARRAY_APPEND(array, val) \
+{ \
+	ALLOC_GROW((array)->arr, (array)->nr + 1, (array)->alloc); \
+	(array)->arr[(array)->nr++] = (val); \
+} while (0)
+
+#define FREE_ARRAY(array) free((array)->arr)
+
+#define ARRAY_INIT(array) memset(array, 0, sizeof(*(array)))
+
 #endif
