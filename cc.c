@@ -13,6 +13,7 @@ static void usage(const char *progname, int err)
 	fprintf(stderr, "       -h|--help: this message\n");
 	fprintf(stderr, "       -l|--lex:  print the lex'ed tokens\n");
 	fprintf(stderr, "       -t|--tree: print the parsed tree in dot format\n");
+	fprintf(stderr, "       -c:        do not link, only produce an object file\n");
 	fprintf(stderr, "       -S:        leave the asm file and don't generate the binary\n");
 
 	exit(err ? 129 : 0);
@@ -67,27 +68,28 @@ static char *mk_asm_filename(const char *source_filename)
 	return out;
 }
 
-static void assemble_and_link(const char *asm_filename)
+static void assemble(const char *asm_filename, int link)
 {
 	size_t base_len;
 	int sys_ret;
-	char *bin_filename, *assembler_cmd;
+	char *out_filename, *assembler_cmd;
 
 	if (!strip_suffix(asm_filename, ".s", &base_len))
 		die("BUG: generated asm file without .s extension: '%s'",
 		    asm_filename);
-	bin_filename = xstrndup(asm_filename, base_len);
+	out_filename = xmkstr("%.*s%s", base_len, asm_filename, link ? "" : ".o");
 
 	/* TODO: avoid calling system() with string derivated from user input? */
-	assembler_cmd = xmkstr("gcc %s -o %s", asm_filename, bin_filename);
+	assembler_cmd = xmkstr("gcc %s %s -o %s", link ? "" : "-c",
+			       asm_filename, out_filename);
 	sys_ret = system(assembler_cmd);
 
 	if (sys_ret == -1)
 		die_errno("system() failed");
 	else if (sys_ret)
-		die("failed to call gcc to assemble and link");
+		die("failed to call gcc to assemble the binary");
 
-	free(bin_filename);
+	free(out_filename);
 }
 
 static int has_suffix(const char *filename, const char *expected_suffix)
@@ -102,7 +104,10 @@ int main(int argc, char **argv)
 	struct token *tokens;
 	struct ast_program *prog;
 	char **arg_cursor, *asm_filename;
-	int print_lex = 0, print_tree = 0, stop_at_assembly = 0;
+	int print_lex = 0,
+	    print_tree = 0,
+	    stop_at_assembly = 0,
+	    link = 1;
 
 	for (arg_cursor = argv + 1; *arg_cursor; arg_cursor++) {
 		if (*arg_cursor[0] != '-')
@@ -113,6 +118,8 @@ int main(int argc, char **argv)
 			print_lex = 1;
 		else if (!strcmp(*arg_cursor, "-t") || !strcmp(*arg_cursor, "--tree"))
 			print_tree = 1;
+		else if (!strcmp(*arg_cursor, "-c"))
+			link = 0;
 		else if (!strcmp(*arg_cursor, "-S"))
 			stop_at_assembly = 1;
 		else
@@ -126,8 +133,8 @@ int main(int argc, char **argv)
 
 	if (print_tree && print_lex)
 		die("--lex and --tree are incompatible");
-	if (stop_at_assembly && (print_tree || print_lex))
-		die("-S is incompatible with --lex and --tree");
+	if ((stop_at_assembly || !link) && (print_tree || print_lex))
+		die("-S and -c are incompatible with --lex and --tree");
 
 	if (!has_suffix(*arg_cursor, ".c"))
 		die("input file must have .c suffix");
@@ -152,7 +159,7 @@ int main(int argc, char **argv)
 	if (stop_at_assembly)
 		goto asm_out;
 
-	assemble_and_link(asm_filename);
+	assemble(asm_filename, link);
 	if (unlink(asm_filename))
 		error_errno("failed to remove temporary asm file '%s'", asm_filename);
 
