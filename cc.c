@@ -15,6 +15,7 @@ static void usage(const char *progname, int err)
 	fprintf(stderr, "       -t|--tree: print the parsed tree in dot format\n");
 	fprintf(stderr, "       -c:        do not link, only produce an object file\n");
 	fprintf(stderr, "       -S:        leave the asm file and don't generate the binary\n");
+	fprintf(stderr, "       -o <file>: the pathname for the output file\n");
 
 	exit(err ? 129 : 0);
 }
@@ -68,16 +69,19 @@ static char *mk_asm_filename(const char *source_filename)
 	return out;
 }
 
-static void assemble(const char *asm_filename, int link)
+static char *mk_bin_filename(const char *source_filename, int link)
 {
 	size_t base_len;
-	int sys_ret;
-	char *out_filename, *assembler_cmd;
+	if (!strip_suffix(source_filename, ".c", &base_len))
+		die("expected input file with .c suffix");
+	char *out = xmkstr("%.*s%s", base_len, source_filename, link ? "" : ".o");
+	return out;
+}
 
-	if (!strip_suffix(asm_filename, ".s", &base_len))
-		die("BUG: generated asm file without .s extension: '%s'",
-		    asm_filename);
-	out_filename = xmkstr("%.*s%s", base_len, asm_filename, link ? "" : ".o");
+static void assemble(const char *asm_filename, char *out_filename, int link)
+{
+	int sys_ret;
+	char *assembler_cmd;
 
 	/* TODO: avoid calling system() with string derivated from user input? */
 	assembler_cmd = xmkstr("gcc %s %s -o %s", link ? "" : "-c",
@@ -88,8 +92,6 @@ static void assemble(const char *asm_filename, int link)
 		die_errno("system() failed");
 	else if (sys_ret)
 		die("failed to call gcc to assemble the binary");
-
-	free(out_filename);
 }
 
 static int has_suffix(const char *filename, const char *expected_suffix)
@@ -103,27 +105,38 @@ int main(int argc, char **argv)
 	char *file_buf;
 	struct token *tokens;
 	struct ast_program *prog;
-	char **arg_cursor, *asm_filename;
+	char **arg_cursor, *out_filename = NULL,
+	     *asm_filename = NULL, *bin_filename = NULL;
+	const char *value;
 	int print_lex = 0,
 	    print_tree = 0,
 	    stop_at_assembly = 0,
 	    link = 1;
 
 	for (arg_cursor = argv + 1; *arg_cursor; arg_cursor++) {
-		if (*arg_cursor[0] != '-')
+		if (*arg_cursor[0] != '-') {
 			break; /* not an option */
-		else if (!strcmp(*arg_cursor, "-h") || !strcmp(*arg_cursor, "--help"))
+		} else if (!strcmp(*arg_cursor, "-h") || !strcmp(*arg_cursor, "--help")) {
 			usage(*argv, 0);
-		else if (!strcmp(*arg_cursor, "-l") || !strcmp(*arg_cursor, "--lex"))
+		} else if (!strcmp(*arg_cursor, "-l") || !strcmp(*arg_cursor, "--lex")) {
 			print_lex = 1;
-		else if (!strcmp(*arg_cursor, "-t") || !strcmp(*arg_cursor, "--tree"))
+		} else if (!strcmp(*arg_cursor, "-t") || !strcmp(*arg_cursor, "--tree")) {
 			print_tree = 1;
-		else if (!strcmp(*arg_cursor, "-c"))
+		} else if (!strcmp(*arg_cursor, "-c")) {
 			link = 0;
-		else if (!strcmp(*arg_cursor, "-S"))
+		} else if (skip_prefix(*arg_cursor, "-o", &value)) {
+			if (!*value) {
+				arg_cursor++;
+				value = *arg_cursor;
+			}
+			if (!value || value[0] == '-')
+				die("-o requires a value");
+			out_filename = xstrdup(value);
+		} else if (!strcmp(*arg_cursor, "-S")) {
 			stop_at_assembly = 1;
-		else
+		} else {
 			die("unknown option '%s'", *arg_cursor);
+		}
 	}
 
 	if (!*arg_cursor || *(arg_cursor + 1)) {
@@ -153,16 +166,22 @@ int main(int argc, char **argv)
 		print_ast_in_dot(prog);
 		goto ast_out;
 	}
-	
-	asm_filename = mk_asm_filename(*arg_cursor);
+
+	if (stop_at_assembly && out_filename)
+		asm_filename = out_filename;
+	else
+		asm_filename = mk_asm_filename(*arg_cursor);
 	generate_x86_asm(prog, asm_filename);
 	if (stop_at_assembly)
 		goto asm_out;
 
-	assemble(asm_filename, link);
+	bin_filename = out_filename ? out_filename :
+		       mk_bin_filename(*arg_cursor, link);
+	assemble(asm_filename, bin_filename, link);
 	if (unlink(asm_filename))
 		error_errno("failed to remove temporary asm file '%s'", asm_filename);
 
+	free(bin_filename);
 asm_out:
 	free(asm_filename);
 ast_out:
