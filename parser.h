@@ -144,7 +144,11 @@ struct ast_statement {
 	} type;
 
 	union {
-		struct ast_expression *ret_exp;
+		struct {
+			struct token *tok;
+			struct ast_opt_expression opt_exp;
+		} _return;
+
 		struct ast_opt_expression opt_exp;
 		struct ast_var_decl *decl;
 		struct if_else {
@@ -208,6 +212,10 @@ struct ast_func_decl {
 	 * (Enforced by parser.c)
 	 */
 	struct ast_statement *body;
+	enum return_type {
+		RET_INT,
+		RET_VOID,
+	} return_type;
 };
 
 struct ast_program {

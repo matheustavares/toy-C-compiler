@@ -40,7 +40,8 @@ size_t symtable_var_ref(struct symtable *tab, struct var_ref *v);
 
 void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 		       unsigned int scope);
-void symtable_func_call(struct symtable *tab, struct func_call *call);
+struct ast_func_decl *symtable_func_call(struct symtable *tab,
+					 struct func_call *call);
 
 /* 
  * How many bytes were allocated at a given scope. Note that due to variable

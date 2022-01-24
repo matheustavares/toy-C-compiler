@@ -37,6 +37,8 @@ struct x86_ctx {
 	struct stack continue_labels,
 		     break_labels;
 
+	struct ast_func_decl *cur_func;
+
 	struct labelset user_labels;
 };
 
@@ -46,7 +48,8 @@ struct x86_ctx {
 			die_errno("fprintf error"); \
 	} while (0)
 
-static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx);
+static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
+				int require_value);
 static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx);
 
 static char *label_or_skip_2nd_clause(void)
@@ -62,10 +65,10 @@ static void generate_logic_or(struct ast_expression *exp, struct x86_ctx *ctx)
 
 	char *label_skip_2nd_clause = label_or_skip_2nd_clause();
 
-	generate_expression(exp->u.bin_op.lexp, ctx);
+	generate_expression(exp->u.bin_op.lexp, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " jne	%s\n", label_skip_2nd_clause);
-	generate_expression(exp->u.bin_op.rexp, ctx);
+	generate_expression(exp->u.bin_op.rexp, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, "%s:\n", label_skip_2nd_clause);
 	emit(ctx, " mov	$0, %%eax\n");
@@ -86,10 +89,10 @@ static void generate_logic_and(struct ast_expression *exp, struct x86_ctx *ctx)
 
 	char *label_skip_2nd_clause = label_and_skip_2nd_clause();
 
-	generate_expression(exp->u.bin_op.lexp, ctx);
+	generate_expression(exp->u.bin_op.lexp, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_skip_2nd_clause);
-	generate_expression(exp->u.bin_op.rexp, ctx);
+	generate_expression(exp->u.bin_op.rexp, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, "%s:\n", label_skip_2nd_clause);
 	emit(ctx, " mov	$0, %%eax\n");
@@ -109,19 +112,20 @@ static char *label_ternary_end(void)
 	return xmkstr("_ternary_end_%lu", counter++);
 }
 
-static void generate_ternary(struct ast_expression *exp, struct x86_ctx *ctx)
+static void generate_ternary(struct ast_expression *exp, struct x86_ctx *ctx,
+			     int require_value)
 {
 	assert(exp->type == AST_EXP_TERNARY);
 	char *label_else = label_ternary_else();
 	char *label_end = label_ternary_end();
 
-	generate_expression(exp->u.ternary.condition, ctx);
+	generate_expression(exp->u.ternary.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_else);
-	generate_expression(exp->u.ternary.if_exp, ctx);
+	generate_expression(exp->u.ternary.if_exp, ctx, require_value);
 	emit(ctx, " jmp %s\n", label_end);
 	emit(ctx, "%s:\n", label_else);
-	generate_expression(exp->u.ternary.else_exp, ctx);
+	generate_expression(exp->u.ternary.else_exp, ctx, require_value);
 	emit(ctx, "%s:\n", label_end);
 
 	free(label_else);
@@ -129,7 +133,8 @@ static void generate_ternary(struct ast_expression *exp, struct x86_ctx *ctx)
 }
 
 /* Convention: generate_expression should put the result in eax. */
-static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
+static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
+				int require_value)
 {
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
@@ -149,7 +154,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 			struct ast_expression *lexp = exp->u.bin_op.lexp;
 			assert(lexp->type == AST_EXP_VAR);
 			size_t stack_index = symtable_var_ref(ctx->symtable, &lexp->u.var);
-			generate_expression(exp->u.bin_op.rexp, ctx);
+			generate_expression(exp->u.bin_op.rexp, ctx, 1);
 			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
 			return;
 		}
@@ -162,7 +167,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		 * sub-expression is calculated, but it is easier to do it this
 		 * way.
 		 */
-		generate_expression(exp->u.bin_op.rexp, ctx);
+		generate_expression(exp->u.bin_op.rexp, ctx, 1);
 		/*
 		 * Saving this in a register would be faster, but we don't know
 		 * how many sub-expressions there is and register allocation is
@@ -170,7 +175,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		 * stack.
 		 */
 		emit(ctx, " push	%%rax\n");
-		generate_expression(exp->u.bin_op.lexp, ctx);
+		generate_expression(exp->u.bin_op.lexp, ctx, 1);
 		emit(ctx, " pop	%%rcx\n");
 
 		switch (bin_op_type) {
@@ -256,13 +261,13 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		break;
 
 	case AST_EXP_TERNARY:
-		generate_ternary(exp, ctx);
+		generate_ternary(exp, ctx, require_value);
 		break;
 
 	case AST_EXP_UNARY_OP:
 		size_t stack_index;
 		struct ast_expression *un_op_val = exp->u.un_op.exp;
-		generate_expression(un_op_val, ctx);
+		generate_expression(un_op_val, ctx, 1);
 		switch (exp->u.un_op.type) {
 		case EXP_OP_NEGATION:
 			emit(ctx, " neg	%%eax\n");
@@ -318,9 +323,15 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		 * Note the ssize_t usage to avoid an unsigned overflow with
 		 * i-- when i is 0.
 		 */
-		symtable_func_call(ctx->symtable, &exp->u.call);
+		struct ast_func_decl *decl =
+				symtable_func_call(ctx->symtable, &exp->u.call);
+
+		if (require_value && decl->return_type == RET_VOID)
+			die("void not ignored as it ought to be\n%s",
+			    show_token_on_source_line(exp->u.call.tok));
+
 		for (ssize_t i = exp->u.call.args.nr - 1; i >= 0; i--) {
-			generate_expression(exp->u.call.args.arr[i], ctx);
+			generate_expression(exp->u.call.args.arr[i], ctx, 1);
 			emit(ctx, " push	%%rax\n");
 		}
 		for (size_t i = 0; i < MIN(NR_CALL_REGS, exp->u.call.args.nr); i++)
@@ -367,7 +378,7 @@ static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
 
 	if (ie->else_st) {
 		char *label_else = label_if_else_else();
-		generate_expression(ie->condition, ctx);
+		generate_expression(ie->condition, ctx, 1);
 		emit(ctx, " cmp	$0, %%eax\n");
 		emit(ctx, " je	%s\n", label_else);
 		generate_statement(ie->if_st, ctx);
@@ -377,7 +388,7 @@ static void generate_if_else(struct if_else *ie, struct x86_ctx *ctx)
 		emit(ctx, "%s:\n", label_end);
 		free(label_else);
 	} else {
-		generate_expression(ie->condition, ctx);
+		generate_expression(ie->condition, ctx, 1);
 		emit(ctx, " cmp	$0, %%eax\n");
 		emit(ctx, " je	%s\n", label_end);
 		generate_statement(ie->if_st, ctx);
@@ -438,7 +449,7 @@ static void generate_while(struct ast_statement *st, struct x86_ctx *ctx)
 
 	assert(st->type == AST_ST_WHILE);
 	emit(ctx, "%s:\n", label_start);
-	generate_expression(st->u._while.condition, ctx);
+	generate_expression(st->u._while.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_end);
 	generate_statement(st->u._while.body, ctx);
@@ -465,7 +476,7 @@ static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
 	emit(ctx, "%s:\n", label_start);
 	generate_statement(st->u._do.body, ctx);
 	emit(ctx, "%s:\n", label_condition);
-	generate_expression(st->u._do.condition, ctx);
+	generate_expression(st->u._do.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " jne	%s\n", label_start);
 	emit(ctx, "%s:\n", label_end);
@@ -478,10 +489,11 @@ static void generate_do(struct ast_statement *st, struct x86_ctx *ctx)
 }
 
 static void generate_opt_expression(struct ast_opt_expression opt_exp,
-				    struct x86_ctx *ctx)
+				    struct x86_ctx *ctx,
+				    int require_value)
 {
 	if (opt_exp.exp)
-		generate_expression(opt_exp.exp, ctx);
+		generate_expression(opt_exp.exp, ctx, require_value);
 }
 
 static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
@@ -495,14 +507,14 @@ static void generate_for(struct ast_statement *st, struct x86_ctx *ctx)
 	stack_push(&ctx->continue_labels, label_epilogue);
 
 	assert(st->type == AST_ST_FOR);
-	generate_opt_expression(st->u._for.prologue, ctx);
+	generate_opt_expression(st->u._for.prologue, ctx, 0);
 	emit(ctx, "%s:\n", label_condition);
-	generate_expression(st->u._for.condition, ctx);
+	generate_expression(st->u._for.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_end);
 	generate_statement(st->u._for.body, ctx);
 	emit(ctx, "%s:\n", label_epilogue);
-	generate_opt_expression(st->u._for.epilogue, ctx);
+	generate_opt_expression(st->u._for.epilogue, ctx, 0);
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
@@ -523,7 +535,7 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	 */
 	symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
 	if (decl->value) {
-		generate_expression(decl->value, ctx);
+		generate_expression(decl->value, ctx, 1);
 	} else {
 		/* We don't really need to initialize it, but... */
 		emit(ctx, " mov	$0, %%eax\n");
@@ -554,12 +566,12 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
 	assert(st->type == AST_ST_FOR_DECL);
 	generate_var_decl(st->u.for_decl.decl, ctx);
 	emit(ctx, "%s:\n", label_condition);
-	generate_expression(st->u._for.condition, ctx);
+	generate_expression(st->u._for.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
 	emit(ctx, " je	%s\n", label_end);
 	generate_statement(st->u._for.body, ctx);
 	emit(ctx, "%s:\n", label_epilogue);
-	generate_opt_expression(st->u._for.epilogue, ctx);
+	generate_opt_expression(st->u._for.epilogue, ctx, 0);
 	emit(ctx, " jmp	%s\n", label_condition);
 	emit(ctx, "%s:\n", label_end);
 
@@ -578,15 +590,25 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 	struct token *tok;
 	switch(st->type) {
 	case AST_ST_RETURN:
-		generate_expression(st->u.ret_exp, ctx);
-		/* exp value is on eax, so just return it. */
+		if (st->u._return.opt_exp.exp) {
+			if (ctx->cur_func->return_type != RET_INT) {
+				die("trying to return value from void function\n%s\nFunction declared at:\n%s",
+				    show_token_on_source_line(st->u._return.tok),
+				    show_token_on_source_line(ctx->cur_func->tok));
+			}
+			generate_expression(st->u._return.opt_exp.exp, ctx, 1);
+		} else if (ctx->cur_func->return_type != RET_VOID) {
+			die("missing return value on non-void function\n%s\nFunction declared at:\n%s",
+			    show_token_on_source_line(st->u._return.tok),
+			    show_token_on_source_line(ctx->cur_func->tok));
+		}
 		generate_func_epilogue_and_ret(ctx);
 		break;
 	case AST_ST_VAR_DECL:
 		generate_var_decl(st->u.decl, ctx);
 		break;
 	case AST_ST_EXPRESSION:
-		generate_opt_expression(st->u.opt_exp, ctx);
+		generate_opt_expression(st->u.opt_exp, ctx, 0);
 		break;
 	case AST_ST_IF_ELSE:
 		generate_if_else(&st->u.if_else, ctx);
@@ -676,6 +698,7 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	if (!fun->body)
 		return;
 
+	ctx->cur_func = fun;
 	labelset_init(&ctx->user_labels);
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
@@ -693,15 +716,16 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	/*
 	 * If the function is missing a return statement, and it is
 	 * the main() function, it should return 0. If it is not
-	 * main(), the behavior is undefined. To keep uniformity, we
-	 * will return 0 in both cases.
+	 * main() and its type is not void, the behavior is undefined. To
+	 * keep uniformity, we will return 0 in both cases.
 	 *
 	 * NEEDSWORK: this will be redundant if there was already a return
 	 * statement, but it would be trickier to test whether all if-else
 	 * branches have return statements, so we accept the
 	 * redundancy.
 	 */
-	emit(ctx, " mov	$0, %%eax\n");
+	if (!strcmp(fun->name, "main") || fun->return_type != RET_VOID)
+		emit(ctx, " mov	$0, %%eax\n");
 	generate_func_epilogue_and_ret(ctx);
 
 	ctx->stack_index = 0;
@@ -712,6 +736,7 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	/* Check if all refered labels were defined. */
 	labelset_check(&ctx->user_labels);
 	labelset_destroy(&ctx->user_labels);
+	ctx->cur_func = NULL;
 }
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)

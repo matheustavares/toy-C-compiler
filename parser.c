@@ -488,8 +488,13 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 
 	if (check_and_pop_gently(&tok, TOK_RETURN_KW)) {
 		st->type = AST_ST_RETURN;
-		st->u.ret_exp = parse_exp(&tok);
-		check_and_pop(&tok, TOK_SEMICOLON);
+		st->u._return.tok = &tok[-1];
+		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
+			st->u._return.opt_exp.exp = NULL;
+		} else {
+			st->u._return.opt_exp.exp = parse_exp(&tok);
+			check_and_pop(&tok, TOK_SEMICOLON);
+		}
 
 	} else if (check_and_pop_gently(&tok, TOK_IF_KW)) {
 		st->type = AST_ST_IF_ELSE;
@@ -579,7 +584,12 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	struct ast_func_decl *fun = xmalloc(sizeof(*fun));
 	struct token *tok = *tok_ptr;
 
-	check_and_pop(&tok, TOK_INT_KW);
+	switch (check_and_pop(&tok, TOK_INT_KW, TOK_VOID_KW)) {
+	case TOK_INT_KW: fun->return_type = RET_INT; break;
+	case TOK_VOID_KW: fun->return_type = RET_VOID; break;
+	default: BUG("unexpected token type");
+	}
+
 	check_and_pop(&tok, TOK_IDENTIFIER);
 	fun->name = xstrdup((char *)tok[-1].value);
 	fun->tok = &tok[-1];
@@ -683,7 +693,7 @@ static void free_ast_statement(struct ast_statement *st)
 {
 	switch (st->type) {
 	case AST_ST_RETURN:
-		free_ast_expression(st->u.ret_exp);
+		free_ast_opt_expression(st->u._return.opt_exp);
 		break;
 	case AST_ST_VAR_DECL:
 		free_ast_var_decl(st->u.decl);

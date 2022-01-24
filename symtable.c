@@ -102,9 +102,10 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 			    decl->name, show_token_on_source_line(sym->tok),
 			    show_token_on_source_line(decl->tok));
 		}
-		if (!sym->u.decl->empty_parameter_declaration &&
-		    !decl->empty_parameter_declaration &&
-		    (sym->u.decl->parameters.nr != decl->parameters.nr)) {
+		if ((sym->u.decl->return_type != decl->return_type) ||
+		    (!sym->u.decl->empty_parameter_declaration &&
+		     !decl->empty_parameter_declaration &&
+		     (sym->u.decl->parameters.nr != decl->parameters.nr))) {
 			/*
 			 * NOTE: we can only do this direct comparison because
 			 * all our parameters are int, and thus, same-sized.
@@ -143,7 +144,8 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 	sym->scope = scope;
 }
 
-void symtable_func_call(struct symtable *tab, struct func_call *call)
+struct ast_func_decl *symtable_func_call(struct symtable *tab,
+					 struct func_call *call)
 {
 	struct sym_data *sdata = symtable_find(tab, call->name);
 	if (!sdata)
@@ -158,4 +160,5 @@ void symtable_func_call(struct symtable *tab, struct func_call *call)
 		die("parameter mismatch on call to '%s'\n%s\nDefined here:\n%s",
 		    call->name, show_token_on_source_line(call->tok),
 		    show_token_on_source_line(sdata->tok));
+	return sdata->u.decl;
 }

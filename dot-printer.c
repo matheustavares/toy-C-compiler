@@ -157,8 +157,11 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 	switch (st->type) {
 	case AST_ST_RETURN:
 		node = add_label(labels, xstrdup("Return"));
-		next_node = print_ast_expression(st->u.ret_exp, labels);
-		print_arc(node, next_node);
+		if (st->u._return.opt_exp.exp) {
+			next_node = print_ast_expression(st->u._return.opt_exp.exp,
+							 labels);
+			print_arc(node, next_node);
+		}
 		break;
 	case AST_ST_VAR_DECL:
 		node = print_ast_var_decl(st->u.decl, labels);
@@ -247,6 +250,19 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
 	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
+	size_t ret_node;
+
+	switch (fun->return_type) {
+	case RET_INT:
+		ret_node = add_label(labels, xstrdup("<int>"));
+		break;
+	case RET_VOID:
+		ret_node = add_label(labels, xstrdup("<void>"));
+		break;
+	default: BUG("unknown return type: %d", fun->return_type);
+	}
+	print_arc_label(node, ret_node, "return\\ntype");
+
 	if (fun->empty_parameter_declaration) {
 		size_t next_node = add_label(labels, xstrdup("<empty\\nparameter\\nlist>"));
 		print_arc_label(node, next_node, "parameters");
