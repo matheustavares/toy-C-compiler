@@ -25,23 +25,43 @@ $ ./cc -t file.c | dot -Tpng | display
 # ImageMagick (display) to show it.
 ```
 
-## Overview of the files
+Check `./cc -h` for all available options.
 
+## Overview of the source files 
+
+Main source files:
+
+- cc.c: the CLI option parser and main entry point
 - lexer.c: the tokenizer
 - parser.c: a recursive descent parser
 - x86.c: code generation to x86\_64 assembly (AT&T syntax)
-- lib: miscellaneous utilities to handle errors, arrays, etc.
+
+Auxiliary source files:
+
+- lib: miscellaneous utilities to handle errors, strings, arrays, etc.
+- dot-printer.[ch]: prints an AST (abstract syntax tree) in dot format.
+- symtable.[ch]: table of "currently known symbols" (vars and funcs) during
+		 assembly generation.
+- labelset.[ch]: set of user defined labels (i.e. those used in `goto`'s) to
+		 assist the assembly generation.
 
 ## Testing
 
-There are two types of tests:
+Tests are divided in three parts:
+
+- Tests of internal lib routines and APIs, available at `lib-tests`.
 
 - General end-to-end tests, which are available at the submodule
   `compiler-tests`. This is [a
   fork](https://github.com/matheustavares/c-compiler-tests) of the test repo
-  [provided by Nora](https://github.com/nlsandler/write_a_c_compiler).
+  [provided by Nora](https://github.com/nlsandler/write_a_c_compiler). These
+  tests are input based and they check that the compiler fails on invalid
+  input and succeeds (i.e. produces the same result as our reference compiler,
+  gcc) on valid input.
 
-- Tests of specific lib routines and APIs, available at `lib-tests`.
+- `extra-tests`: these are additional end-to-end tests that would not fit
+  in the framework of the previous item. They check CLI options, default
+  filenames, x86 conventions, etc.
 
 To run all tests, execute:
 
@@ -54,6 +74,7 @@ Or select only one type:
 ```shell
 $ make compiler-tests [STAGES="X Y ..."]
 $ make lib-tests
+$ make extra-tests
 ```
 
 Use `STAGES=...` to limit the compiler-tests to a desired set of stages. (See
