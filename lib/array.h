@@ -128,7 +128,31 @@ static inline size_t st_mult(size_t a, size_t b)
 	(array)->arr[(array)->nr++] = (val); \
 } while (0)
 
-#define FREE_ARRAY(array) free((array)->arr)
+#define FREE_ARRAY(array) \
+{ \
+	free((array)->arr); \
+	(array)->nr = (array)->alloc = 0; \
+} while (0)
+
+/* Quite inefficient, but that's fine for our needs. */
+#define ARRAY_REMOVE(array, val) \
+{ \
+	for (size_t i = 0; i < (array)->nr; i++) { \
+		if ((array)->arr[i] == (val)) { \
+			size_t to_move = ((array)->nr - i - 1) * sizeof((array)->arr[0]); \
+			if (to_move) \
+				memmove(&((array)->arr[i]), &((array)->arr[i+1]), to_move); \
+			(array)->nr--; \
+			if ((array)->nr && (array)->nr / (double)(array)->alloc < 0.25) { \
+				(array)->alloc /= 2; \
+				if ((array)->alloc < (array)->nr) \
+					(array)->alloc = (array)->nr + 8; \
+				REALLOC_ARRAY((array)->arr, (array)->alloc); \
+			} \
+			break; \
+		} \
+	} \
+} while (0)
 
 #define ARRAY_INIT(array) memset(array, 0, sizeof(*(array)))
 

@@ -19,10 +19,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see http://www.gnu.org/licenses
  *
- * Some of these error routines were inspired / partially-coppied from
- * the homonymous usage.c routines from the Git project[1], at commit
- * 88d915a634b44 ("A few fixes  before -rc2", 2021-11-04). The version
- * presented here was simplified as we don't need the more complex
+ * Some of these error routines were inspired / partially-coppied from the
+ * homonymous usage.c and git-compat-util.h routines from the Git project[1],
+ * at commit 88d915a634b44 ("A few fixes  before -rc2", 2021-11-04). The
+ * version presented here was simplified as we don't need the more complex
  * mechanics and flexibility from the original ones.
  * [1]: https://github.com/git/git
  */
@@ -65,6 +65,17 @@ noreturn void die(char *fmt, ...)
 	if (at_die)
 		at_die();
 	exit(128);
+}
+
+noreturn void BUG_fl(const char *file, int line, const char *fmt, ...)
+{
+	va_list args;
+	va_start(args, fmt);
+	fprintf(stderr, "BUG: %s:%d: ", file, line);
+	vfprintf(stderr, fmt, args);
+	fprintf(stderr, "\n");
+	va_end(args);
+	abort();
 }
 
 void push_at_die(at_die_fn fn)
