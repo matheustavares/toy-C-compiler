@@ -43,7 +43,12 @@ extra-tests: $(MAIN)
 	@cd extra-tests && \
 	echo "========= extra tests:" && \
 	for testfile in `ls test-*.sh`; do \
-		./$$testfile ../$(MAIN) && echo "PASSED: $$testfile" ; \
+		./$$testfile ../$(MAIN); \
+		if test $$? -eq 0; then \
+			echo "PASSED: $$testfile"; \
+		else \
+			echo "FAILED: $$testfile"; \
+		fi \
 	done
 
 ###############################################################################

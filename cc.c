@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "dot-printer.h"
 #include "x86.h"
+#include "lib/tempfile.h"
 
 static void usage(const char *progname, int err)
 {
@@ -56,7 +57,7 @@ static void print_tokens(struct token *tokens)
 		print_token(tok);
 }
 
-static char *mk_asm_filename(const char *source_filename)
+static char *asm_filename_from_source(const char *source_filename)
 {
 	size_t len;
 	char *out;
@@ -69,7 +70,7 @@ static char *mk_asm_filename(const char *source_filename)
 	return out;
 }
 
-static char *mk_bin_filename(const char *source_filename, int link)
+static char *bin_filename_from_source(const char *source_filename, int link)
 {
 	size_t base_len;
 	if (!strip_suffix(source_filename, ".c", &base_len))
@@ -102,11 +103,11 @@ static int has_suffix(const char *filename, const char *expected_suffix)
 
 int main(int argc, char **argv)
 {
-	char *file_buf;
+	char *source_buf;
 	struct token *tokens;
 	struct ast_program *prog;
-	char **arg_cursor, *out_filename = NULL,
-	     *asm_filename = NULL, *bin_filename = NULL;
+	char **arg_cursor, *out_filename = NULL;
+	struct tempfile *asm_file;
 	const char *value;
 	int print_lex = 0,
 	    print_tree = 0,
@@ -143,17 +144,20 @@ int main(int argc, char **argv)
 		error("expecting one positional argument: the C filename");
 		usage(*argv, 1);
 	}
+	char *source = *arg_cursor;
 
 	if (print_tree && print_lex)
 		die("--lex and --tree are incompatible");
 	if ((stop_at_assembly || !link) && (print_tree || print_lex))
 		die("-S and -c are incompatible with --lex and --tree");
 
-	if (!has_suffix(*arg_cursor, ".c"))
+	if (!has_suffix(source, ".c"))
 		die("input file must have .c suffix");
 
-	file_buf = read_file(*arg_cursor);
-	tokens = lex(file_buf);
+	/********************* LEXER and PARSER *********************/
+
+	source_buf = read_file(source);
+	tokens = lex(source_buf);
 
 	if (print_lex) {
 		print_tokens(tokens);
@@ -167,28 +171,44 @@ int main(int argc, char **argv)
 		goto ast_out;
 	}
 
-	if (stop_at_assembly && out_filename)
-		asm_filename = out_filename;
-	else
-		asm_filename = mk_asm_filename(*arg_cursor);
-	generate_x86_asm(prog, asm_filename);
-	if (stop_at_assembly)
+	/************************ ASSEMBLY **************************/
+
+	if (stop_at_assembly) {
+		char *asm_filename = out_filename ? xstrdup(out_filename) :
+				     asm_filename_from_source(source);
+		asm_file = create_tempfile(asm_filename, 1);
+		free(asm_filename);
+	} else {
+		asm_file = mktempfile_s(".tmp-asm-XXXXXX.s", 2);
+	}
+
+	if (!fdopen_tempfile(asm_file, "w"))
+		die_errno("fdopen error on '%s'", get_tempfile_path(asm_file));
+
+	generate_x86_asm(prog, get_tempfile_fp(asm_file));
+
+	if (close_tempfile_gently(asm_file))
+		error_errno("failed to close '%s'", get_tempfile_path(asm_file));
+
+	if (stop_at_assembly) {
+		if (commit_tempfile(&asm_file))
+			die("failed to close assembly file");
 		goto asm_out;
+	}
 
-	bin_filename = out_filename ? out_filename :
-		       mk_bin_filename(*arg_cursor, link);
-	assemble(asm_filename, bin_filename, link);
-	if (unlink(asm_filename))
-		error_errno("failed to remove temporary asm file '%s'", asm_filename);
+	/************************* BINARY ***************************/
 
+	char *bin_filename = out_filename ? xstrdup(out_filename) :
+		       bin_filename_from_source(source, link);
+	assemble(get_tempfile_path(asm_file), bin_filename, link);
 	free(bin_filename);
+
 asm_out:
-	free(asm_filename);
 ast_out:
 	free_ast(prog);
 lex_out:
 	free_tokens(tokens);
-	free(file_buf);
+	free(source_buf);
 
 	return 0;
 }

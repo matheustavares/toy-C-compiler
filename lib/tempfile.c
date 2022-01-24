@@ -178,17 +178,19 @@ static void deactivate_tempfile(struct tempfile *tempfile)
 }
 
 /* Make sure errno contains a meaningful value on error */
-struct tempfile *create_tempfile_mode(const char *path, int mode)
+struct tempfile *create_tempfile_mode(const char *path, int allow_existent,
+				      int mode)
 {
 	struct tempfile *tempfile = new_tempfile();
 
+	int creation_flags = allow_existent ? O_TRUNC : O_EXCL;
 	tempfile->filename = xstrdup(path);
 	tempfile->fd = open(tempfile->filename,
-			    O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, mode);
+			    O_RDWR | O_CREAT | creation_flags | O_CLOEXEC, mode);
 	if (O_CLOEXEC && tempfile->fd < 0 && errno == EINVAL)
 		/* Try again w/o O_CLOEXEC: the kernel might not support it */
 		tempfile->fd = open(tempfile->filename,
-				    O_RDWR | O_CREAT | O_EXCL, mode);
+				    O_RDWR | O_CREAT | creation_flags, mode);
 	if (tempfile->fd < 0) {
 		deactivate_tempfile(tempfile);
 		return NULL;
