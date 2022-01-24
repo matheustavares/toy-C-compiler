@@ -32,7 +32,7 @@ tmpdir="$(mktemp -d tmp-cc-test.XXXXXXXXXX)"
 	echo 'int main() { return 0; }' >main.c
 	"../$test_cc" -S main.c
 	# Should not remove main.s from step above
-	"../$test_cc" main.c
+	"../$test_cc" -o main main.c
 	test -a main
 	test -a main.s
 )

@@ -45,7 +45,7 @@ extra-tests: $(MAIN)
 	for testfile in `ls test-*.sh`; do \
 		./$$testfile ../$(MAIN); \
 		if test $$? -eq 0; then \
-			echo "PASSED: $$testfile"; \
+			echo "OK: $$testfile"; \
 		else \
 			echo "FAILED: $$testfile"; \
 		fi \

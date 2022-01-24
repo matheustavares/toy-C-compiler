@@ -20,12 +20,36 @@ trap cleanup EXIT
 
 tmpdir="$(mktemp -d tmp-cc-test.XXXXXXXXXX)"
 
+mkdir "$tmpdir/dir"
 cat >"$tmpdir"/main.c <<-EOF
 int main()
 {
 	return 2 + 2;
 }
 EOF
+cp "$tmpdir/main.c" "$tmpdir/dir/main.c"
+
+# TEST: Default names (without -o)
+
+"$test_cc" -c "$tmpdir/dir/main.c"
+"$test_cc" -S "$tmpdir/dir/main.c"
+(cd "$tmpdir" && "../$test_cc" dir/main.c)
+
+(
+	cd "$tmpdir"
+	file dir/main.o >file-obj
+	grep -q relocatable file-obj
+
+	file dir/main.s >file-asm
+	grep -q "assembler source" file-asm
+
+	file a.out >file-bin
+	grep -q executable file-bin
+
+	rm -rf dir a.out
+)
+
+# TEST: With -o
 
 "$test_cc" -o "$tmpdir"/out.o -c "$tmpdir"/main.c
 "$test_cc" -o "$tmpdir"/out.s -S "$tmpdir"/main.c
@@ -42,6 +66,8 @@ EOF
 	file out >file-bin
 	grep -q executable file-bin
 )
+
+# TEST: Multiple -o
 
 "$test_cc" -o "$tmpdir"/out1 -o "$tmpdir"/out2 "$tmpdir"/main.c
 ! test -e "$tmpdir"/out1

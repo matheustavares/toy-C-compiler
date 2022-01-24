@@ -75,8 +75,8 @@ static char *bin_filename_from_source(const char *source_filename, int link)
 	size_t base_len;
 	if (!strip_suffix(source_filename, ".c", &base_len))
 		die("expected input file with .c suffix");
-	char *out = xmkstr("%.*s%s", base_len, source_filename, link ? "" : ".o");
-	return out;
+	return link ? xstrdup("a.out") :
+		      xmkstr("%.*s.o", base_len, source_filename);
 }
 
 static void assemble(const char *asm_filename, char *out_filename, int link)
