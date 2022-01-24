@@ -122,6 +122,14 @@ static inline size_t st_mult(size_t a, size_t b)
 		size_t nr, alloc; \
 	}
 
+#define NAMED_ARRAY(type, name) \
+	struct name { \
+		type *arr; \
+		size_t nr, alloc; \
+	}
+
+#define ARRAY_STATIC_INIT { 0 }
+
 #define ARRAY_APPEND(array, val) \
 { \
 	ALLOC_GROW((array)->arr, (array)->nr + 1, (array)->alloc); \

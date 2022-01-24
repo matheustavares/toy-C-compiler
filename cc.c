@@ -10,7 +10,7 @@
 
 static void usage(const char *progname, int err)
 {
-	fprintf(stderr, "usage: %s [options] <c-file>\n", progname);
+	fprintf(stderr, "usage: %s [options] <sources>\n", progname);
 	fprintf(stderr, "       -h|--help: this message\n");
 	fprintf(stderr, "       -l|--lex:  print the lex'ed tokens\n");
 	fprintf(stderr, "       -t|--tree: print the parsed tree in dot format\n");
@@ -70,13 +70,12 @@ static char *asm_filename_from_source(const char *source_filename)
 	return out;
 }
 
-static char *bin_filename_from_source(const char *source_filename, int link)
+static char *obj_filename_from_source(const char *source_filename)
 {
 	size_t base_len;
 	if (!strip_suffix(source_filename, ".c", &base_len))
 		die("expected input file with .c suffix");
-	return link ? xstrdup("a.out") :
-		      xmkstr("%.*s.o", base_len, source_filename);
+	return xmkstr("%.*s.o", base_len, source_filename);
 }
 
 static void assemble(const char *asm_filename, char *out_filename, int link)
@@ -95,6 +94,36 @@ static void assemble(const char *asm_filename, char *out_filename, int link)
 		die("failed to call gcc to assemble the binary");
 }
 
+NAMED_ARRAY(struct tempfile *, tempfile_array);
+
+static void assemble_many(struct tempfile_array *asm_files, char *out_filename)
+{
+	int sys_ret;
+	char *assembler_cmd;
+	char *files = xstrdup("");
+
+	/*
+	 * This constant malloc()+free() is not a good pattern. I should
+	 * allocate once and iteratively append the paths reallocating the
+	 * initial buffer when/if necessary. I'm only doing thus way for
+	 * simplicity.
+	 */
+	for (size_t i = 0; i < asm_files->nr; i++) {
+		char *old = files;
+		files = xmkstr("%s %s", files, get_tempfile_path(asm_files->arr[i]));
+		free(old);
+	}
+
+	assembler_cmd = xmkstr("gcc %s -o %s", files, out_filename);
+	sys_ret = system(assembler_cmd);
+
+	if (sys_ret == -1)
+		die_errno("system() failed");
+	else if (sys_ret)
+		die("failed to call gcc to assemble the binary");
+	free(files);
+}
+
 static int has_suffix(const char *filename, const char *expected_suffix)
 {
 	size_t len;
@@ -102,21 +131,21 @@ static int has_suffix(const char *filename, const char *expected_suffix)
 }
 
 int main(int argc, char **argv)
-{
-	char *source_buf;
-	struct token *tokens;
-	struct ast_program *prog;
+{	
 	char **arg_cursor, *out_filename = NULL;
-	struct tempfile *asm_file;
-	const char *value;
 	int print_lex = 0,
 	    print_tree = 0,
 	    stop_at_assembly = 0,
 	    link = 1;
 
+	ARRAY(const char *) sources = ARRAY_STATIC_INIT;
+
 	for (arg_cursor = argv + 1; *arg_cursor; arg_cursor++) {
+		const char *value;
 		if (*arg_cursor[0] != '-') {
-			break; /* not an option */
+			if (!has_suffix(*arg_cursor, ".c"))
+				die("can only handle .c sources");
+			ARRAY_APPEND(&sources, *arg_cursor);
 		} else if (!strcmp(*arg_cursor, "-h") || !strcmp(*arg_cursor, "--help")) {
 			usage(*argv, 0);
 		} else if (!strcmp(*arg_cursor, "-l") || !strcmp(*arg_cursor, "--lex")) {
@@ -140,75 +169,94 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (!*arg_cursor || *(arg_cursor + 1)) {
-		error("expecting one positional argument: the C filename");
+	if (!sources.nr) {
+		error("expecting at least one source file");
 		usage(*argv, 1);
 	}
-	char *source = *arg_cursor;
 
 	if (print_tree && print_lex)
 		die("--lex and --tree are incompatible");
-	if ((stop_at_assembly || !link) && (print_tree || print_lex))
-		die("-S and -c are incompatible with --lex and --tree");
+	if ((print_tree || print_lex) && sources.nr > 1)
+		die("--lex and --tree can only be used with a single source file");
+	if ((stop_at_assembly || !link || out_filename) && (print_tree || print_lex))
+		die("-S, -c, and -o are incompatible with --lex and --tree");
+	if ((stop_at_assembly || !link) && out_filename && sources.nr > 1)
+		die("-S and -c can only be used with -o for a single source file");
 
-	if (!has_suffix(source, ".c"))
-		die("input file must have .c suffix");
-
-	/********************* LEXER and PARSER *********************/
-
-	source_buf = read_file(source);
-	tokens = lex(source_buf);
-
-	if (print_lex) {
-		print_tokens(tokens);
-		goto lex_out;
+	if (print_lex || print_tree) {
+		char *source_buf = read_file(sources.arr[0]);
+		struct token *tokens = lex(source_buf);
+		if (print_lex) {
+			print_tokens(tokens);
+		} else {
+			struct ast_program *prog = parse_program(tokens);
+			print_ast_in_dot(prog);
+			free_ast(prog);
+		}
+		free_tokens(tokens);
+		free(source_buf);
+		return 0;
 	}
 
-	prog = parse_program(tokens);
+	struct tempfile_array asm_files_to_link = ARRAY_STATIC_INIT;
 
-	if (print_tree) {
-		print_ast_in_dot(prog);
-		goto ast_out;
+	for (size_t i = 0; i < sources.nr; i++) {
+		const char *source = sources.arr[i];
+
+		/********************* LEXER and PARSER *********************/
+
+		char *source_buf = read_file(source);
+		struct token *tokens = lex(source_buf);
+		struct ast_program *prog = parse_program(tokens);
+
+		/************************ ASSEMBLY **************************/
+
+		struct tempfile *asm_file;
+		if (stop_at_assembly) {
+			char *asm_filename = out_filename ? xstrdup(out_filename) :
+					     asm_filename_from_source(source);
+			asm_file = create_tempfile(asm_filename, 1);
+			free(asm_filename);
+		} else {
+			asm_file = mktempfile_s(".tmp-asm-XXXXXX.s", 2);
+		}
+		if (!asm_file)
+			die("failed to create assembly file");
+
+		if (!fdopen_tempfile(asm_file, "w"))
+			die_errno("fdopen error on '%s'", get_tempfile_path(asm_file));
+
+		generate_x86_asm(prog, get_tempfile_fp(asm_file));
+
+		if (close_tempfile_gently(asm_file))
+			error_errno("failed to close '%s'", get_tempfile_path(asm_file));
+
+		if (stop_at_assembly) {
+			if (commit_tempfile(&asm_file))
+				die("failed to close assembly file");
+			goto clean;
+		}
+
+		/******************** OBJECT or BINARY **********************/
+
+		if (!link) {
+			char *obj_filename = out_filename ? xstrdup(out_filename) :
+					obj_filename_from_source(source);
+			assemble(get_tempfile_path(asm_file), obj_filename, 0);
+			free(obj_filename);
+		} else {
+			ARRAY_APPEND(&asm_files_to_link, asm_file);
+		}
+
+	clean:
+		free_ast(prog);
+		free_tokens(tokens);
+		free(source_buf);
 	}
 
-	/************************ ASSEMBLY **************************/
-
-	if (stop_at_assembly) {
-		char *asm_filename = out_filename ? xstrdup(out_filename) :
-				     asm_filename_from_source(source);
-		asm_file = create_tempfile(asm_filename, 1);
-		free(asm_filename);
-	} else {
-		asm_file = mktempfile_s(".tmp-asm-XXXXXX.s", 2);
-	}
-
-	if (!fdopen_tempfile(asm_file, "w"))
-		die_errno("fdopen error on '%s'", get_tempfile_path(asm_file));
-
-	generate_x86_asm(prog, get_tempfile_fp(asm_file));
-
-	if (close_tempfile_gently(asm_file))
-		error_errno("failed to close '%s'", get_tempfile_path(asm_file));
-
-	if (stop_at_assembly) {
-		if (commit_tempfile(&asm_file))
-			die("failed to close assembly file");
-		goto asm_out;
-	}
-
-	/************************* BINARY ***************************/
-
-	char *bin_filename = out_filename ? xstrdup(out_filename) :
-		       bin_filename_from_source(source, link);
-	assemble(get_tempfile_path(asm_file), bin_filename, link);
-	free(bin_filename);
-
-asm_out:
-ast_out:
-	free_ast(prog);
-lex_out:
-	free_tokens(tokens);
-	free(source_buf);
+	if (asm_files_to_link.nr)
+		assemble_many(&asm_files_to_link, out_filename ? 
+						  out_filename : "a.out");
 
 	return 0;
 }
