@@ -101,6 +101,7 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_FUNC_CALL;
 		exp->u.call.name = xstrdup((char *)tok[-2].value);
+		exp->u.call.tok = &tok[-2];
 		ARRAY_INIT(&exp->u.call.args);
 		int is_first_parameter = 1;
 		while (tok->type != TOK_CLOSE_PAR) {
@@ -581,6 +582,7 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_INT_KW);
 	check_and_pop(&tok, TOK_IDENTIFIER);
 	fun->name = xstrdup((char *)tok[-1].value);
+	fun->tok = &tok[-1];
 	check_and_pop(&tok, TOK_OPEN_PAR);
 
 	ARRAY_INIT(&fun->parameters);

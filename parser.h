@@ -103,9 +103,10 @@ struct ast_expression {
 					      *else_exp;
 		} ternary;
 
-		struct {
+		struct func_call {
 			const char *name;
 			ARRAY(struct ast_expression *) args;
+			struct token *tok;
 		} call;
 	} u;
 };
@@ -198,6 +199,7 @@ struct ast_statement {
 
 struct ast_func_decl {
 	const char *name;
+	struct token *tok;
 	ARRAY(struct ast_var_decl *) parameters;
 	/*
 	 * Optional. If present, must be of type AST_ST_BLOCK.

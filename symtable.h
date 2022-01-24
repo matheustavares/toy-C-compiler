@@ -10,12 +10,12 @@ struct sym_data {
 	enum {
 		SYM_LOCAL_VAR,
 		/* SYM_GLOBAL_VAR, */
-		/* SYM_FUNC, */
+		SYM_FUNC,
 	} type;
 	union {
 		size_t stack_index; /* SYM_LOCAL_VAR */
 		/* char *label; */ /* SYM_GLOBAL_VAR */
-		/* struct ... */ /* SYM_FUNC */
+		struct ast_func_decl *decl; /* SYM_FUNC */
 	} u;
 	struct token *tok;
 	unsigned int scope;
@@ -37,6 +37,10 @@ int symtable_has(struct symtable *tab, const char *symname);
 void symtable_put_lvar(struct symtable *tab, struct ast_var_decl *decl,
 		       size_t stack_index, unsigned int scope);
 size_t symtable_var_ref(struct symtable *tab, struct var_ref *v);
+
+void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
+		       unsigned int scope);
+void symtable_func_call(struct symtable *tab, struct func_call *call);
 
 /* 
  * How many bytes were allocated at a given scope. Note that due to variable

@@ -318,6 +318,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx)
 		 * Note the ssize_t usage to avoid an unsigned overflow with
 		 * i-- when i is 0.
 		 */
+		symtable_func_call(ctx->symtable, &exp->u.call);
 		for (ssize_t i = exp->u.call.args.nr - 1; i >= 0; i--) {
 			generate_expression(exp->u.call.args.arr[i], ctx);
 			emit(ctx, " push	%%rax\n");
@@ -671,6 +672,10 @@ static void func_body_generator(struct ast_statement *st,
 
 static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 {
+	symtable_put_func(ctx->symtable, fun, ctx->scope);
+	if (!fun->body)
+		return;
+
 	labelset_init(&ctx->user_labels);
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
@@ -711,11 +716,8 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 {
-	for (size_t i = 0; i < prog->funcs.nr; i++) {
-		struct ast_func_decl *fun = prog->funcs.arr[i];
-		if (fun->body)
-			generate_func_decl(fun, ctx);
-	}
+	for (size_t i = 0; i < prog->funcs.nr; i++)
+		generate_func_decl(prog->funcs.arr[i], ctx);
 }
 
 void generate_x86_asm(struct ast_program *prog, FILE *out)
