@@ -198,11 +198,11 @@ struct tempfile *create_tempfile_mode(const char *path, int mode)
 	return tempfile;
 }
 
-struct tempfile *mktempfile(const char *filename_template)
+struct tempfile *mktempfile_s(const char *filename_template, size_t suffixlen)
 {
 	struct tempfile *tempfile = new_tempfile();
 	tempfile->filename = xstrdup(filename_template);
-	tempfile->fd = mkstemp(tempfile->filename);
+	tempfile->fd = mkstemps(tempfile->filename, suffixlen);
 	if (tempfile->fd < 0) {
 		deactivate_tempfile(tempfile);
 		return NULL;

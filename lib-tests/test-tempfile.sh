@@ -23,7 +23,6 @@ diff -u $tmpdir/expect $tmpdir/actual &&
 test -a $tmpdir/tmp-* &&
 rm $tmpdir/tmp-* &&
 
-
 cat >$tmpdir/expect <<-EOF &&
 create-path '$tmpdir/tmp'
 commit
@@ -34,6 +33,17 @@ echo "TEST: creation path" &&
 diff -u $tmpdir/expect $tmpdir/actual &&
 test -a $tmpdir/tmp &&
 rm $tmpdir/tmp &&
+
+cat >$tmpdir/expect <<-EOF &&
+create-template-s '$tmpdir/tmp-XXXXXX.s',2
+commit
+EOF
+
+echo "TEST: creation template with suffix" &&
+./test-tempfile create-template-s=$tmpdir/tmp-XXXXXX.s,2 commit >$tmpdir/actual &&
+diff -u $tmpdir/expect $tmpdir/actual &&
+test -a $tmpdir/tmp-*.s &&
+rm $tmpdir/tmp-*.s &&
 
 cat >$tmpdir/expect <<-EOF &&
 create-path '$tmpdir/tmp'

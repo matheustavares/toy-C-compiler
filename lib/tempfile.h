@@ -137,7 +137,8 @@ static inline struct tempfile *create_tempfile(const char *path)
  * for writing the temporary file. On errors, they return NULL and set
  * errno appropriately.
  */
-struct tempfile *mktempfile(const char *filename_template);
+struct tempfile *mktempfile_s(const char *filename_template, size_t suffixlen);
+#define mktempfile(filename_template) mktempfile_s(filename_template, 0)
 
 /*
  * Associate a stdio stream with the temporary file (which must still

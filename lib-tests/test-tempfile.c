@@ -12,6 +12,7 @@ int main(int argc, char **argv)
 		if (!strcmp(*argv, "-h") || !strcmp(*argv, "--help")) {
 			printf("Options:\n");
 			printf("    create-template=<str>\n");
+			printf("    create-template-s=<str>,<int>\n");
 			printf("    create-path=<str>\n");
 			printf("    exit\n");
 			printf("    signal\n");
@@ -27,9 +28,24 @@ int main(int argc, char **argv)
 			t = mktempfile(val);
 			if (!t)
 				die("failed to create tempfile");
+		} else if (skip_prefix(*argv, "create-template-s=", &val)) {
+			const char *comma;
+			for (comma = val; *comma && *comma != ','; comma++)
+				;
+			if (!*comma || !*(++comma))
+				die("unknown option '%s'", *argv);
+		
+			const char *str = xstrndup(val, comma - val - 1);
+			int suffixlen = atoi(comma);
+
+			printf("create-template-s '%s',%d\n", str, suffixlen);
+			t = mktempfile_s(str, suffixlen);
+			if (!t)
+				die_errno("failed to create tempfile");
+			free((char *)str);
 		} else if (skip_prefix(*argv, "create-path=", &val)) {
 			printf("create-path '%s'\n", val);
-			t = create_tempfile(val);
+			t = create_tempfile(val, 0);
 			if (!t)
 				die("failed to create tempfile");
 		} else if (!strcmp(*argv, "exit")) {
