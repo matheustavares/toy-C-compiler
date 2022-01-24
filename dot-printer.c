@@ -25,7 +25,7 @@ static size_t add_label(struct label_list *list, char *label)
 static void print_labels(struct label_list *labels)
 {
 	for (size_t i = 0; i < labels->nr; i++)
-		printf("  %zu [label=\"%s\"];\n", i, labels->arr[i]);
+		printf(" %zu [label=\"%s\"];\n", i, labels->arr[i]);
 }
 
 static void free_labels(struct label_list *labels)
@@ -247,11 +247,16 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *labels)
 {
 	size_t node = add_label(labels, xmkstr("Function: %s", fun->name));
-	for (size_t i = 0; i < fun->parameters.nr; i++) {
-		size_t next_node = add_label(labels, xstrdup(fun->parameters.arr[i]->name));
-		char *parameter = xmkstr("parameter %zu", i);
-		print_arc_label(node, next_node, parameter);
-		free(parameter);
+	if (fun->empty_parameter_declaration) {
+		size_t next_node = add_label(labels, xstrdup("<empty\\nparameter\\nlist>"));
+		print_arc_label(node, next_node, "parameters");
+	} else {
+		for (size_t i = 0; i < fun->parameters.nr; i++) {
+			size_t next_node = add_label(labels, xstrdup(fun->parameters.arr[i]->name));
+			char *parameter = xmkstr("parameter %zu", i);
+			print_arc_label(node, next_node, parameter);
+			free(parameter);
+		}
 	}
 	if (fun->body) {
 		size_t next_node = print_ast_statement(fun->body, labels);

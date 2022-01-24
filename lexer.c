@@ -70,6 +70,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_QUESTION_MARK: return "?";
 
 	case TOK_INT_KW: return "<int> keyword";
+	case TOK_VOID_KW: return "<void> keyword";
 	case TOK_RETURN_KW: return "<return> keyword";
 	case TOK_IF_KW: return "<if> keyword";
 	case TOK_ELSE_KW: return "<else> keyword";
@@ -387,6 +388,8 @@ struct token *lex(const char *str)
 			;
 
 		else if (consume_keyword(&ctx, "int", TOK_INT_KW))
+			;
+		else if (consume_keyword(&ctx, "void", TOK_VOID_KW))
 			;
 		else if (consume_keyword(&ctx, "return", TOK_RETURN_KW))
 			;

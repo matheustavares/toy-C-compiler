@@ -200,6 +200,8 @@ struct ast_statement {
 struct ast_func_decl {
 	const char *name;
 	struct token *tok;
+	/* True if func was declared as `func()`. But not `func(void)`! */
+	int empty_parameter_declaration:1;
 	ARRAY(struct ast_var_decl *) parameters;
 	/*
 	 * Optional. If present, must be of type AST_ST_BLOCK.

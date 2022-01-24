@@ -583,23 +583,31 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_IDENTIFIER);
 	fun->name = xstrdup((char *)tok[-1].value);
 	fun->tok = &tok[-1];
+	ARRAY_INIT(&fun->parameters);
+
 	check_and_pop(&tok, TOK_OPEN_PAR);
 
-	ARRAY_INIT(&fun->parameters);
-	int is_first_parameter = 1;
-	while (tok->type != TOK_CLOSE_PAR) {
-		if (!is_first_parameter)
-			check_and_pop(&tok, TOK_COMMA);
-		check_and_pop(&tok, TOK_INT_KW);
-		check_and_pop(&tok, TOK_IDENTIFIER);
-		struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
-		decl->name = xstrdup((char *)tok[-1].value);
-		decl->tok = &tok[-1];
-		ARRAY_APPEND(&fun->parameters, decl);
-		is_first_parameter = 0;
+	fun->empty_parameter_declaration = 0;
+	if (check_and_pop_gently(&tok, TOK_VOID_KW)) {
+		check_and_pop(&tok, TOK_CLOSE_PAR);
+	} else {
+		int is_first_parameter = 1;
+		while (tok->type != TOK_CLOSE_PAR) {
+			if (!is_first_parameter)
+				check_and_pop(&tok, TOK_COMMA);
+			check_and_pop(&tok, TOK_INT_KW);
+			check_and_pop(&tok, TOK_IDENTIFIER);
+			struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+			decl->name = xstrdup((char *)tok[-1].value);
+			decl->tok = &tok[-1];
+			ARRAY_APPEND(&fun->parameters, decl);
+			is_first_parameter = 0;
+		}
+		check_and_pop(&tok, TOK_CLOSE_PAR);
+		if (is_first_parameter)
+			fun->empty_parameter_declaration = 1;
 	}
 
-	check_and_pop(&tok, TOK_CLOSE_PAR);
 	if (check_and_pop_gently(&tok, TOK_SEMICOLON))
 		fun->body = NULL;
 	else

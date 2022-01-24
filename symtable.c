@@ -101,7 +101,10 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 			die("redefinition of function '%s'.\nFirst:\n%s\nThen:\n%s",
 			    decl->name, show_token_on_source_line(sym->tok),
 			    show_token_on_source_line(decl->tok));
-		} else if (sym->u.decl->parameters.nr != decl->parameters.nr) {
+		}
+		if (!sym->u.decl->empty_parameter_declaration &&
+		    !decl->empty_parameter_declaration &&
+		    (sym->u.decl->parameters.nr != decl->parameters.nr)) {
 			/*
 			 * NOTE: we can only do this direct comparison because
 			 * all our parameters are int, and thus, same-sized.
@@ -110,9 +113,20 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 			    decl->name, show_token_on_source_line(sym->tok),
 			    show_token_on_source_line(decl->tok));
 		}
-		/* If we have a function with body already, keep that. */
-		if (sym->u.decl->body)
+		/*
+		 * If we have a function with body already, keep that.
+		 * But if the definition has an empty parameter declaration,
+		 * the prototype must have too.
+		 */
+		if (sym->u.decl->body) {
+			if (sym->u.decl->empty_parameter_declaration &&
+			    !decl->empty_parameter_declaration) {
+				die("redeclaration of function '%s' with different signature.\nFirst:\n%s\nThen:\n%s",
+				    decl->name, show_token_on_source_line(sym->tok),
+				    show_token_on_source_line(decl->tok));
+			}
 			return;
+		}
 	} else if (sym && sym->scope == scope) {
 		die("redefinition of symbol '%s'.\nFirst:\n%s\nThen:\n%s",
 		    decl->name, show_token_on_source_line(sym->tok),
@@ -139,7 +153,8 @@ void symtable_func_call(struct symtable *tab, struct func_call *call)
 		die("cannot call '%s': it is not a function\n%s\nDefined here:\n%s",
 		    call->name, show_token_on_source_line(call->tok),
 		    show_token_on_source_line(sdata->tok));
-	if (sdata->u.decl->parameters.nr != call->args.nr)
+	if (!sdata->u.decl->empty_parameter_declaration &&
+	    (sdata->u.decl->parameters.nr != call->args.nr))
 		die("parameter mismatch on call to '%s'\n%s\nDefined here:\n%s",
 		    call->name, show_token_on_source_line(call->tok),
 		    show_token_on_source_line(sdata->tok));

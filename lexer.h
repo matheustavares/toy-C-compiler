@@ -15,6 +15,7 @@ enum token_type {
 
 	/* keywords */
 	TOK_INT_KW,
+	TOK_VOID_KW,
 	TOK_RETURN_KW,
 	TOK_IF_KW,
 	TOK_ELSE_KW,
