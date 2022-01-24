@@ -504,6 +504,8 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 		st->u.if_else.if_st = parse_statement_1(&tok, 0);
 		if (check_and_pop_gently(&tok, TOK_ELSE_KW))
 			st->u.if_else.else_st = parse_statement_1(&tok, 0);
+		else
+			st->u.if_else.else_st = NULL;
 
 	} else if (allow_declaration && tok->type == TOK_INT_KW) {
 		st->type = AST_ST_VAR_DECL;
