@@ -47,7 +47,7 @@ extra-tests: $(MAIN)
 		if test $$? -eq 0; then \
 			echo "OK: $$testfile"; \
 		else \
-			echo "FAILED: $$testfile"; \
+			echo "FAILED: $$testfile" && exit 1; \
 		fi \
 	done
 
