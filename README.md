@@ -3,6 +3,81 @@
 A toy compiler I'm writing following the excellent tutorial from Nora Sandler:
 [https://norasandler.com/2017/11/29/Write-a-Compiler.html](https://norasandler.com/2017/11/29/Write-a-Compiler.html).
 
+## Example
+
+The following program can be compiled with this compiler. It receives an
+integer N on stdin and prints a list of the Nth first Fibonacci numbers.
+
+```c
+/* We don't have includes, so we must declare the prototypes. */
+int getchar(void);
+int putchar(int c);
+
+int fibbonacci(int n)
+{
+	if (n <= 1)
+		return n;
+	/* Very inefficient. Only to demonstrate recursion. */
+	return fibbonacci(n-1) + fibbonacci(n-2);
+}
+
+/*
+ * Get an unsigned int from stdin. Return -1 on failure. The integer must
+ * be followed by a newline and cannot be surrounded by spaces.
+ */
+int getint(void)
+{
+	int val = 0;
+	int got_input = 0;
+	/* We don't have 'EOF' define, so stop on any negative number. */
+	for (int c = getchar(); c >= 0; c = getchar()) {
+		if (c == 10) // newline
+			break;
+		if (c < 48 || c > 57) // Error: not a digit
+			return -1;
+		c -= 48;
+		val *= 10;
+		val += c;
+		got_input = 1;
+	}
+	return got_input ? val : -1;
+}
+
+/* Prints an unsigned integer followed by a newline. */
+void putint(int val)
+{
+	if (val < 0)
+		return;
+
+	int divisor = 1;
+	for (int val_cpy = val; val_cpy / 10; val_cpy /= 10)
+		divisor *= 10;
+
+	while (divisor) {
+		int digit = val / divisor;
+		putchar(digit + 48);
+		val -= digit * divisor;
+		divisor /= 10;
+	}
+	putchar(10);
+}
+
+/*
+ * Receives a positive integer N from stdin and prints the first Nth
+ * Fibonacci numbers to stdout.
+ */
+int main()
+{
+	int val = getint();
+	if (val <= 0)
+		return 1;
+	putchar(10); // newline separator
+	for (int i = 0; i < val; i++)
+		putint(fibbonacci(i)); // Again: inefficient, only for demonstration
+	return 0;
+}
+```
+
 ## Clone and compile
 
 ```shell
@@ -26,6 +101,38 @@ $ ./cc -t file.c | dot -Tpng | display
 ```
 
 Check `./cc -h` for all available options.
+
+## Current features and limitations
+
+- [x] All (`int`) arithmetic operators (`+`, `*`, etc.)
+- [x] All relational operators (`>=`, `<`, `==`, etc.)
+- [x] All bitwise operators (`<<`, `&`, etc.)
+- [x] All logical operators (`&&`, `||`, etc.)
+- [x] Compound operators (`+=`, `*=`, etc.)
+- [x] Suffix/postfix increment and decrement (`++`, `--`)
+- [x] Ternary operator
+- [x] Inline and block comments
+- [x] Local variables (with proper scoping rules)
+- [x] `for`, `while`, and `do-while` loops
+- [x] `if` and `if-else` statements
+- [x] `int` and `void` types
+- [x] `goto` and labels
+- [x] Output to assembly (.s) and object file (.o).
+- [x] Multiple source files support.
+- [x] libc (using glibc through gcc on assemble - _a bit cheating_) 
+- [ ] Global variables
+- [ ] Storage classifiers/qualifiers (`static`, `extern`, `volatile`, `const`, etc.)
+- [ ] Pointers and arrays
+- [ ] Dereference and "address-of" operators
+- [ ] Structs and unions (and its operators)
+- [ ] Preprocessing (macros, includes, ifdef, pragmas, etc.)
+- [ ] Other types: char, float, unsigned, etc.
+- [ ] Strings
+- [ ] Type casting
+- [ ] Switch-case
+- [ ] CR+LF line ending support
+- [ ] Variadic functions
+- [ ] Function parameter list without names
 
 ## Overview of the source files 
 
