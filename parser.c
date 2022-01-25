@@ -11,6 +11,7 @@ static struct ast_expression *parse_exp(struct token **tok_ptr);
 static struct ast_statement *parse_statement(struct token **tok_ptr);
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration);
+static void free_ast_expression(struct ast_expression *exp);
 
 static char *str_join_token_types(const char *clause, va_list tt_list)
 {
@@ -627,13 +628,62 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	return fun;
 }
 
+static struct ast_var_decl *maybe_parse_global_var(struct token **tok_ptr)
+{
+	struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+	struct token *tok = *tok_ptr;
+
+	if (!check_and_pop_gently(&tok, TOK_INT_KW) ||
+	    !check_and_pop_gently(&tok, TOK_IDENTIFIER))
+		goto error;
+
+	decl->name = xstrdup((char *)tok[-1].value);
+	decl->tok = &tok[-1];
+	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT)) {
+		struct token *assign_tok = &tok[-1];
+		decl->value = parse_exp(&tok);
+		if (decl->value->type != AST_EXP_CONSTANT_INT) {
+			/*
+			 * NEEDSWORK: we should also allow expressions that can
+			 * evaluate to a constant int at compile time. For
+			 * example: "2 + 2", and "~3".
+			 */
+			die("assignment to global variable must be a constant int\n%s",
+			    show_token_on_source_line(assign_tok));
+		}
+	}
+
+	if (!check_and_pop_gently(&tok, TOK_SEMICOLON))
+		goto error;
+
+	*tok_ptr = tok;
+	return decl;
+
+error:
+	if (decl->value)
+		free_ast_expression(decl->value);
+	free((char *)decl->name);
+	free(decl);
+	return NULL;
+}
+
 struct ast_program *parse_program(struct token *toks)
 {
 	struct ast_program *prog = xmalloc(sizeof(*prog));
-	ARRAY_INIT(&prog->funcs);
+	ARRAY_INIT(&prog->items);
 
-	while (!end_token(toks))
-		ARRAY_APPEND(&prog->funcs, parse_func_decl(&toks));
+	while (!end_token(toks)) {
+		struct ast_toplevel_item *item = xmalloc(sizeof(*item));
+		struct ast_var_decl *var = maybe_parse_global_var(&toks);
+		if (var) {
+			item->type = TOPLEVEL_VAR_DECL;
+			item->u.var = var;
+		} else {
+			item->type = TOPLEVEL_FUNC_DECL;
+			item->u.func = parse_func_decl(&toks);
+		}
+		ARRAY_APPEND(&prog->items, item);
+	}
 
 	return prog;
 }
@@ -756,11 +806,25 @@ static void free_ast_func_decl(struct ast_func_decl *fun)
 	free(fun);
 }
 
+static void free_ast_toplevel_item(struct ast_toplevel_item *item)
+{
+	switch (item->type) {
+	case TOPLEVEL_FUNC_DECL:
+		free_ast_func_decl(item->u.func);
+		break;
+	case TOPLEVEL_VAR_DECL:
+		free_ast_var_decl(item->u.var);
+		break;
+	default:
+		BUG("unknown toplevel item '%s'", item->type);
+	}
+}
+
 static void free_ast_program(struct ast_program *prog)
 {
-	for (size_t i = 0; i < prog->funcs.nr; i++)
-		free_ast_func_decl(prog->funcs.arr[i]);
-	FREE_ARRAY(&prog->funcs);
+	for (size_t i = 0; i < prog->items.nr; i++)
+		free_ast_toplevel_item(prog->items.arr[i]);
+	FREE_ARRAY(&prog->items);
 	free(prog);
 }
 

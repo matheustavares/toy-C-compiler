@@ -136,6 +136,7 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 
 static size_t print_ast_var_decl(struct ast_var_decl *decl, struct label_list *labels)
 {
+	/* TODO: perhaps print 'Declare global' and 'Declare local'? */
 	size_t node = add_label(labels, xmkstr("Declare variable '%s'", decl->name));
 	if (decl->value) {
 		size_t value_node = print_ast_expression(decl->value, labels);
@@ -281,11 +282,24 @@ static size_t print_ast_func_decl(struct ast_func_decl *fun, struct label_list *
 	return node;
 }
 
+static size_t print_ast_toplevel_item(struct ast_toplevel_item *item,
+				    struct label_list *labels)
+{
+	switch (item->type) {
+	case TOPLEVEL_FUNC_DECL:
+		return print_ast_func_decl(item->u.func, labels);
+	case TOPLEVEL_VAR_DECL:
+		return print_ast_var_decl(item->u.var, labels);
+	default:
+		BUG("unknown toplevel item '%s'", item->type);
+	}
+}
+
 static void print_ast_program(struct ast_program *prog, struct label_list *labels)
 {
 	size_t node = add_label(labels, xstrdup("Program"));
-	for (size_t i = 0; i < prog->funcs.nr; i++) {
-		size_t next_node = print_ast_func_decl(prog->funcs.arr[i], labels);
+	for (size_t i = 0; i < prog->items.nr; i++) {
+		size_t next_node = print_ast_toplevel_item(prog->items.arr[i], labels);
 		print_arc(node, next_node);
 	}
 }

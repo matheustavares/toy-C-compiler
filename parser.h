@@ -218,8 +218,20 @@ struct ast_func_decl {
 	} return_type;
 };
 
+struct ast_toplevel_item {
+	enum {
+		TOPLEVEL_VAR_DECL,
+		TOPLEVEL_FUNC_DECL,
+	} type;
+
+	union {
+		struct ast_var_decl *var;
+		struct ast_func_decl *func;
+	} u;
+};
+
 struct ast_program {
-	ARRAY(struct ast_func_decl *) funcs;
+	ARRAY(struct ast_toplevel_item *) items;
 };
 
 struct ast_program *parse_program(struct token *toks);

@@ -741,8 +741,19 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 {
-	for (size_t i = 0; i < prog->funcs.nr; i++)
-		generate_func_decl(prog->funcs.arr[i], ctx);
+	for (size_t i = 0; i < prog->items.nr; i++) {
+		struct ast_toplevel_item *item = prog->items.arr[i];
+		switch (item->type) {
+		case TOPLEVEL_FUNC_DECL:
+			generate_func_decl(item->u.func, ctx);
+			break;
+		case TOPLEVEL_VAR_DECL:
+			BUG("x86: sorry, I don't know how to generate global vars yet.");
+			break;
+		default:
+			BUG("x86: unknown toplevel item '%s'", item->type);
+		}
+	}
 }
 
 void generate_x86_asm(struct ast_program *prog, FILE *out)
