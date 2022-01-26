@@ -170,9 +170,9 @@ Tests are divided in three parts:
   `compiler-tests`. This is [a
   fork](https://github.com/matheustavares/c-compiler-tests) of the test repo
   [provided by Nora](https://github.com/nlsandler/write_a_c_compiler). These
-  tests are input based and they check that the compiler fails on invalid
-  input and succeeds (i.e. produces the same result as our reference compiler,
-  gcc) on valid input.
+  tests are input based. They check that the compiler fails on invalid
+  input and succeeds on valid input (i.e produces the same exit code and output
+  as gcc).
 
 - `extra-tests`: these are additional end-to-end tests that would not fit
   in the framework of the previous item. They check CLI options, default
