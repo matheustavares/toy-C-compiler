@@ -78,20 +78,21 @@ int main()
 }
 ```
 
-## Clone and compile
+## Clone and build the compiler
 
 ```shell
 $ git clone --recurse-submodules # To clone the tests submodule too
 $ make
+# Produces the binary `./cc`
 ```
 
 ## Running
 
 ```shell
 $ ./cc file.c
-# Creates the binary <file>
+# Creates the binary file "a.out"
 $ ./cc -S file.c
-# Creates the assembly <file.s>
+# Creates the assembly file "file.s"
 
 $ ./cc -l file.c
 # Outputs the identified tokens, one per line.
