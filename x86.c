@@ -534,22 +534,25 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	 *		int v = v = 2;
 	 */
 	symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
+	size_t var_stack_index = ctx->stack_index;
+	/*
+	 * TODO: int is 4 bytes. Investigate if we should really push 8 byte
+	 * onto the stack or do something like:
+	 *	sub $4, %rsp
+	 *	mov %eax, %rsp
+	 * And increment stack_index by 4. Note that we can't push eax
+	 * on x86-64.
+	 */
+	emit(ctx, " sub	$8, %%rsp\n");
+	ctx->stack_index += 8;
+
 	if (decl->value) {
 		generate_expression(decl->value, ctx, 1);
 	} else {
 		/* We don't really need to initialize it, but... */
 		emit(ctx, " mov	$0, %%eax\n");
 	}
-	/*
-	 * TODO: investigate if should push rax (and increment
-	 * stack_index by 8) or do something like:
-	 *	add $4, %rsp
-	 *	mov %eax, %rsp
-	 * And increment stack_index by 4. Note that we can't
-	 * push eax on x86_64.
-	 */
-	emit(ctx, " push	%%rax\n");
-	ctx->stack_index += 8;
+	emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", var_stack_index);
 }
 
 static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
