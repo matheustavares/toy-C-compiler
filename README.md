@@ -196,3 +196,15 @@ $ make extra-tests
 Use `STAGES=...` to limit the compiler-tests to a desired set of stages. (See
 available stage names at the compiler-tests directory.) This can also be used
 with the "tests" make rule.
+
+## Resources
+
+- Nora's tutorial posts on writing a C compiler:
+  [https://norasandler.com/2017/11/29/Write-a-Compiler.html](https://norasandler.com/2017/11/29/Write-a-Compiler.html)
+- C11 Standard: [latest draft](http://www.open-std.org/jtc1/sc22/WG14/www/docs/n1570.pdf).
+  (In particular, [Annex A](http://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf#page=476)'s "Language syntax summary".)
+- Eli Bendersky's ["Parsing expressions by precedence climbing"](https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing)
+- Brown University's CS033 ["x64 Cheat Sheet"](https://cs.brown.edu/courses/cs033/docs/guides/x64_cheatsheet.pdf)
+- Yale University's CS421 ["x86 Assembly Guide"](https://flint.cs.yale.edu/cs421/papers/x86-asm/asm.html)
+- cppreference's ["operator precedence" page](https://en.cppreference.com/w/c/language/operator_precedence)
+- Wikipedia's ["x86-64 calling conventions"](https://en.wikipedia.org/wiki/X86_calling_conventions#x86-64_calling_conventions)
