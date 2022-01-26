@@ -15,8 +15,10 @@ int putchar(int c);
 
 int fibbonacci(int n)
 {
-	if (n <= 1)
-		return n;
+	if (n == 1)
+		return 0;
+	if (n <= 3)
+		return 1;
 	/* Very inefficient. Only to demonstrate recursion. */
 	return fibbonacci(n-1) + fibbonacci(n-2);
 }
@@ -46,9 +48,6 @@ int getint(void)
 /* Prints an unsigned integer followed by a newline. */
 void putint(int val)
 {
-	if (val < 0)
-		return;
-
 	int divisor = 1;
 	for (int val_cpy = val; val_cpy / 10; val_cpy /= 10)
 		divisor *= 10;
@@ -71,9 +70,10 @@ int main()
 	int val = getint();
 	if (val <= 0)
 		return 1;
-	putchar(10); // newline separator
-	for (int i = 0; i < val; i++)
-		putint(fibbonacci(i)); // Again: inefficient, only for demonstration
+	for (int i = 1; i <= val; i++) {
+		/* Again: inefficient, only for demonstration */
+		putint(fibbonacci(i));
+	}
 	return 0;
 }
 ```
