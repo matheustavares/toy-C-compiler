@@ -138,19 +138,27 @@ Check `./cc -h` for all available options.
 
 Main source files:
 
-- cc.c: the CLI option parser and main entry point
-- lexer.c: the tokenizer
-- parser.c: a recursive descent parser
-- x86.c: code generation to x86\_64 assembly (AT&T syntax)
+- **cc.c**: the CLI option parser and main entry point
+- **lexer.c**: the tokenizer
+- **parser.c**: a recursive descent parser. Syntactic errors are detected and
+  printed out at this step, but semantic errors (like function redefinition),
+  are only detected during code generation.
+- **x86.c**: code generation to x86\_64 assembly (AT&T syntax). Also implements
+  some semantic validations.
 
 Auxiliary source files:
 
-- lib: miscellaneous utilities to handle errors, strings, arrays, etc.
-- dot-printer.[ch]: prints an AST (abstract syntax tree) in dot format.
-- symtable.[ch]: table of "currently known symbols" (vars and funcs) during
-		 assembly generation.
-- labelset.[ch]: set of user defined labels (i.e. those used in `goto`'s) to
-		 assist the assembly generation.
+- **lib**: miscellaneous utilities to handle errors, strings, arrays,
+  hashtables, temporary files, etc.
+- **dot-printer.[ch]**: prints an AST (abstract syntax tree) in dot format.
+- **symtable.[ch]**: table of "currently known symbols" (variables and
+  functions) during assembly generation. This is where we check for errors like
+  symbol redefinition and use-before-declaration. This table is duplicated when
+  entering an inner scope (e.g. a code block) to allow for symbol shadowing
+  without affecting the code generation on the upper scope.
+- **labelset.[ch]**: set of user defined labels (i.e. those used in `goto`
+  statements) to assist the assembly generation. Like `symtable.c`, `labelset.c`
+  checks for redefinition and use-before-declaration errors regarding labels.
 
 ## Testing
 
