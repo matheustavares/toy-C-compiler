@@ -20,17 +20,14 @@ struct x86_ctx {
 	struct symtable *symtable;
 	/*
 	 * Local variables are stored in the stack with a position relative to
-	 * %rbp. The first available "spot" for a local variable in a function
-	 * is "%rbp - 8" because the stack frame is initialized with the
-	 * previous %rbp value (which occupies the first 8 bytes).
-	 *
-	 * The stack_index stores what is the next offset (relative to %rbp) to
-	 * store a local variable. Remember that the stack grows "down", so
-	 * even though we store unsigned size_t, the address should be
-	 * interpreted as "%rbp - stack_index";
-	 *
-	 * This is *only* valid inside function generation, and should be
-	 * 0 otherwise.
+	 * %rbp. The stack_index helps to keep track of local variables
+	 * allocations (for this reason, it is *only* valid inside function
+	 * generation). This variable stores the offset of %rsp relative to
+	 * %rsp. So, at any given moment, "-{stack_index}(%rbp)" will be the
+	 * same as "(%rsp)" (if I don't forget to update the variable when
+	 * altering the stack). To allocate a new local variable, the code
+	 * must increment stack_index with the variable's size and them push
+	 * the variable onto the stack (the order is not really important).
 	 */
 	size_t stack_index;
 	unsigned long scope;
@@ -175,8 +172,10 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		 * stack.
 		 */
 		emit(ctx, " push	%%rax\n");
+		ctx->stack_index += 8;
 		generate_expression(exp->u.bin_op.lexp, ctx, 1);
 		emit(ctx, " pop	%%rcx\n");
+		ctx->stack_index -= 8;
 
 		switch (bin_op_type) {
 		case EXP_OP_ADDITION:
@@ -333,9 +332,12 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		for (ssize_t i = exp->u.call.args.nr - 1; i >= 0; i--) {
 			generate_expression(exp->u.call.args.arr[i], ctx, 1);
 			emit(ctx, " push	%%rax\n");
+			ctx->stack_index += 8;
 		}
-		for (size_t i = 0; i < MIN(NR_CALL_REGS, exp->u.call.args.nr); i++)
+		for (size_t i = 0; i < MIN(NR_CALL_REGS, exp->u.call.args.nr); i++) {
 			emit(ctx, " pop	%%%s\n", func_call_regs[i]);
+			ctx->stack_index -= 8;
+		}
 		/* 
 		 * No need to save any register as we hold all variables at
 		 * the stack. So the callee can use all registers as it wants.
@@ -344,8 +346,10 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		/* Remove the stack arguments. */
 		size_t stack_args = exp->u.call.args.nr > NR_CALL_REGS ?
 				    exp->u.call.args.nr - NR_CALL_REGS : 0;
-		if (stack_args)
+		if (stack_args) {
 			emit(ctx, " add	$%zu, %%rsp\n", stack_args * 8);
+			ctx->stack_index -= (stack_args * 8);
+		}
 		break;
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
@@ -533,8 +537,8 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	 * assignment to itself:
 	 *		int v = v = 2;
 	 */
+	size_t var_stack_index = ctx->stack_index += 8;
 	symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
-	size_t var_stack_index = ctx->stack_index;
 	/*
 	 * TODO: int is 4 bytes. Investigate if we should really push 8 byte
 	 * onto the stack or do something like:
@@ -544,7 +548,6 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	 * on x86-64.
 	 */
 	emit(ctx, " sub	$8, %%rsp\n");
-	ctx->stack_index += 8;
 
 	if (decl->value) {
 		generate_expression(decl->value, ctx, 1);
@@ -682,9 +685,9 @@ static void func_body_generator(struct ast_statement *st,
 			emit(ctx, " pushq	%zu(%%rbp)\n",
 			     16 + (i - NR_CALL_REGS) * 8);
 		}
+		ctx->stack_index += 8;
 		symtable_put_lvar(ctx->symtable, parameters->arr[i],
 				  ctx->stack_index, ctx->scope);
-		ctx->stack_index += 8;
 	}
 
 	/* Then we generate the body. */
@@ -713,7 +716,7 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	 */
 	emit(ctx, " push	%%rbp\n");
 	emit(ctx, " mov	%%rsp, %%rbp\n");
-	ctx->stack_index = 8; /* sizeof(%rbp) */
+	ctx->stack_index = 0;
 
 	generate_func_body(fun, ctx);
 	/*
@@ -731,7 +734,6 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 		emit(ctx, " mov	$0, %%eax\n");
 	generate_func_epilogue_and_ret(ctx);
 
-	ctx->stack_index = 0;
 	assert(stack_empty(&ctx->continue_labels) && stack_empty(&ctx->break_labels));
 	stack_destroy(&ctx->continue_labels, NULL);
 	stack_destroy(&ctx->break_labels, NULL);
