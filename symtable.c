@@ -86,7 +86,7 @@ size_t symtable_bytes_in_scope(struct symtable *tab, unsigned int scope)
 	size_t ret = 0;
 	for (size_t i = 0; i < tab->nr; i++)
 		if (tab->data[i].scope == scope)
-			ret += 8; /* for now, all variables on the stack have size 8. */
+			ret += 4; /* for now, all variables on the stack have size 4. */
 	return ret;
 }
 

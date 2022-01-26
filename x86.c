@@ -152,7 +152,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 			assert(lexp->type == AST_EXP_VAR);
 			size_t stack_index = symtable_var_ref(ctx->symtable, &lexp->u.var);
 			generate_expression(exp->u.bin_op.rexp, ctx, 1);
-			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
 			return;
 		}
 
@@ -283,23 +283,23 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 			assert(un_op_val->type == AST_EXP_VAR);
 			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
 			emit(ctx, " add	$1, %%eax\n");
-			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
 			break;
 		case EXP_OP_PREFIX_DEC:
 			assert(un_op_val->type == AST_EXP_VAR);
 			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
 			emit(ctx, " sub	$1, %%eax\n");
-			emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
 			break;
 		case EXP_OP_SUFFIX_INC:
 			assert(un_op_val->type == AST_EXP_VAR);
 			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
-			emit(ctx, " addq	$1, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " addl	$1, -%zu(%%rbp)\n", stack_index);
 			break;
 		case EXP_OP_SUFFIX_DEC:
 			assert(un_op_val->type == AST_EXP_VAR);
 			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
-			emit(ctx, " subq	$1, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " subl	$1, -%zu(%%rbp)\n", stack_index);
 			break;
 		default:
 			die("generate x86: unknown unary op: %d", exp->u.un_op.type);
@@ -310,7 +310,7 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		break;
 	case AST_EXP_VAR:
 		stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
-		emit(ctx, " mov	-%zu(%%rbp), %%rax\n", stack_index);
+		emit(ctx, " movl	-%zu(%%rbp), %%eax\n", stack_index);
 		break;
 	case AST_EXP_FUNC_CALL:
 		/*
@@ -341,14 +341,16 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		/* 
 		 * No need to save any register as we hold all variables at
 		 * the stack. So the callee can use all registers as it wants.
+		 *
+		 * TODO: check if we should align the stack before call.
 		 */
 		emit(ctx, " call	%s\n", exp->u.call.name);
 		/* Remove the stack arguments. */
 		size_t stack_args = exp->u.call.args.nr > NR_CALL_REGS ?
 				    exp->u.call.args.nr - NR_CALL_REGS : 0;
 		if (stack_args) {
-			emit(ctx, " add	$%zu, %%rsp\n", stack_args * 8);
-			ctx->stack_index -= (stack_args * 8);
+			emit(ctx, " add	$%zu, %%rsp\n", stack_args * 4);
+			ctx->stack_index -= (stack_args * 4);
 		}
 		break;
 	default:
@@ -418,8 +420,8 @@ static void generate_new_scope(struct ast_statement *st, struct x86_ctx *ctx,
 	generator(st, ctx, data);
 
 	/* 
-	 * Deallocate block variables. Alternatively, we could do:  
-	 * rsp = rbp - (saved_stack_index  + 8);
+	 * Deallocate block variables. Alternatively, we could do:
+	 * rsp = rbp - saved_stack_index;
 	 */
 	emit(ctx, " add	$%zu, %%rsp\n",
 		symtable_bytes_in_scope(ctx->symtable, ctx->scope));
@@ -537,17 +539,9 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	 * assignment to itself:
 	 *		int v = v = 2;
 	 */
-	size_t var_stack_index = ctx->stack_index += 8;
+	size_t var_stack_index = ctx->stack_index += 4;
 	symtable_put_lvar(ctx->symtable, decl, ctx->stack_index, ctx->scope);
-	/*
-	 * TODO: int is 4 bytes. Investigate if we should really push 8 byte
-	 * onto the stack or do something like:
-	 *	sub $4, %rsp
-	 *	mov %eax, %rsp
-	 * And increment stack_index by 4. Note that we can't push eax
-	 * on x86-64.
-	 */
-	emit(ctx, " sub	$8, %%rsp\n");
+	emit(ctx, " sub	$4, %%rsp\n");
 
 	if (decl->value) {
 		generate_expression(decl->value, ctx, 1);
@@ -555,7 +549,7 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 		/* We don't really need to initialize it, but... */
 		emit(ctx, " mov	$0, %%eax\n");
 	}
-	emit(ctx, " mov	%%rax, -%zu(%%rbp)\n", var_stack_index);
+	emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", var_stack_index);
 }
 
 static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
@@ -673,7 +667,9 @@ static void func_body_generator(struct ast_statement *st,
 	/* First we save the arguments. */
 	for (size_t i = 0; i < parameters->nr; i++) {
 		if (i < NR_CALL_REGS) {
-			emit(ctx, " push	%%%s\n", func_call_regs[i]);
+			emit(ctx, " mov	%%%s, %%rax\n", func_call_regs[i]);
+			emit(ctx, " sub	$4, %%rsp\n");
+			emit(ctx, " movl	%%eax, (%%rsp)\n");
 		} else {
 			/*
 			 * The NR_CALL_REGS-th argument is 16 positions above
@@ -682,10 +678,12 @@ static void func_body_generator(struct ast_statement *st,
 			 * prologue). Subsequent ones are above it (remember:
 			 * the stack grows down, i.e., to lower addresses).
 			 */
-			emit(ctx, " pushq	%zu(%%rbp)\n",
+			emit(ctx, " mov	%zu(%%rbp), %%rax\n",
 			     16 + (i - NR_CALL_REGS) * 8);
+			emit(ctx, " sub	$4, %%rsp\n");
+			emit(ctx, " movl	%%eax, (%%rsp)\n");
 		}
-		ctx->stack_index += 8;
+		ctx->stack_index += 4;
 		symtable_put_lvar(ctx->symtable, parameters->arr[i],
 				  ctx->stack_index, ctx->scope);
 	}
