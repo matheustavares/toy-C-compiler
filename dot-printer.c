@@ -134,16 +134,21 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 	return node;
 }
 
-static size_t print_ast_var_decl(struct ast_var_decl *decl, struct label_list *labels)
+static size_t print_ast_var_decl_1(struct ast_var_decl *decl, int local,
+				   struct label_list *labels)
 {
-	/* TODO: perhaps print 'Declare global' and 'Declare local'? */
-	size_t node = add_label(labels, xmkstr("Declare variable '%s'", decl->name));
+	size_t node = add_label(labels, xmkstr("Declare %s\\nvariable '%s'",
+				local ? "local" : "global", decl->name));
 	if (decl->value) {
 		size_t value_node = print_ast_expression(decl->value, labels);
 		print_arc_label(node, value_node, "with\\nvalue");
 	}
 	return node;
 }
+
+#define print_ast_var_decl_local(decl, labels) print_ast_var_decl_1(decl, 1, labels)
+#define print_ast_var_decl_global(decl, labels) print_ast_var_decl_1(decl, 0, labels)
+
 
 static size_t print_ast_opt_expression(struct ast_opt_expression opt_exp,
 				       struct label_list *labels)
@@ -165,7 +170,7 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		}
 		break;
 	case AST_ST_VAR_DECL:
-		node = print_ast_var_decl(st->u.decl, labels);
+		node = print_ast_var_decl_local(st->u.decl, labels);
 		break;
 	case AST_ST_EXPRESSION:
 		node = print_ast_opt_expression(st->u.opt_exp, labels);
@@ -203,7 +208,7 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		break;
 	case AST_ST_FOR_DECL:
 		node = add_label(labels, xstrdup("for"));
-		next_node = print_ast_var_decl(st->u.for_decl.decl, labels);
+		next_node = print_ast_var_decl_local(st->u.for_decl.decl, labels);
 		print_arc_label(node, next_node, "prologue");
 		next_node = print_ast_expression(st->u.for_decl.condition, labels);
 		print_arc_label(node, next_node, "condition");
@@ -289,7 +294,7 @@ static size_t print_ast_toplevel_item(struct ast_toplevel_item *item,
 	case TOPLEVEL_FUNC_DECL:
 		return print_ast_func_decl(item->u.func, labels);
 	case TOPLEVEL_VAR_DECL:
-		return print_ast_var_decl(item->u.var, labels);
+		return print_ast_var_decl_global(item->u.var, labels);
 	default:
 		BUG("unknown toplevel item '%s'", item->type);
 	}
