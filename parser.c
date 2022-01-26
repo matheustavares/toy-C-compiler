@@ -648,7 +648,7 @@ static struct ast_var_decl *maybe_parse_global_var(struct token **tok_ptr)
 			 * evaluate to a constant int at compile time. For
 			 * example: "2 + 2", and "~3".
 			 */
-			die("assignment to global variable must be a constant int\n%s",
+			die("static initialization requires a constant value\n%s",
 			    show_token_on_source_line(assign_tok));
 		}
 	}

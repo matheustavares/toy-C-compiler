@@ -133,6 +133,7 @@ static void generate_ternary(struct ast_expression *exp, struct x86_ctx *ctx,
 static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 				int require_value)
 {
+	char *var_ref = NULL;
 	switch (exp->type) {
 	case AST_EXP_BINARY_OP:
 		enum bin_op_type bin_op_type = exp->u.bin_op.type;
@@ -143,17 +144,17 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		 */
 		if (bin_op_type == EXP_OP_LOGIC_AND) {
 			generate_logic_and(exp, ctx);
-			return;
+			goto out;
 		} else if (bin_op_type == EXP_OP_LOGIC_OR) {
 			generate_logic_or(exp, ctx);
-			return;
+			goto out;
 		} else if (bin_op_type == EXP_OP_ASSIGNMENT) {
 			struct ast_expression *lexp = exp->u.bin_op.lexp;
 			assert(lexp->type == AST_EXP_VAR);
-			size_t stack_index = symtable_var_ref(ctx->symtable, &lexp->u.var);
+			var_ref = symtable_var_ref(ctx->symtable, &lexp->u.var);
 			generate_expression(exp->u.bin_op.rexp, ctx, 1);
-			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
-			return;
+			emit(ctx, " movl	%%eax, %s\n", var_ref);
+			goto out;
 		}
 
 		/*
@@ -264,7 +265,6 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		break;
 
 	case AST_EXP_UNARY_OP:
-		size_t stack_index;
 		struct ast_expression *un_op_val = exp->u.un_op.exp;
 		generate_expression(un_op_val, ctx, 1);
 		switch (exp->u.un_op.type) {
@@ -281,25 +281,25 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 			break;
 		case EXP_OP_PREFIX_INC:
 			assert(un_op_val->type == AST_EXP_VAR);
-			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			var_ref = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
 			emit(ctx, " add	$1, %%eax\n");
-			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " movl	%%eax, %s\n", var_ref);
 			break;
 		case EXP_OP_PREFIX_DEC:
 			assert(un_op_val->type == AST_EXP_VAR);
-			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			var_ref = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
 			emit(ctx, " sub	$1, %%eax\n");
-			emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", stack_index);
+			emit(ctx, " movl	%%eax, %s\n", var_ref);
 			break;
 		case EXP_OP_SUFFIX_INC:
 			assert(un_op_val->type == AST_EXP_VAR);
-			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
-			emit(ctx, " addl	$1, -%zu(%%rbp)\n", stack_index);
+			var_ref = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " addl	$1, %s\n", var_ref);
 			break;
 		case EXP_OP_SUFFIX_DEC:
 			assert(un_op_val->type == AST_EXP_VAR);
-			stack_index = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
-			emit(ctx, " subl	$1, -%zu(%%rbp)\n", stack_index);
+			var_ref = symtable_var_ref(ctx->symtable, &un_op_val->u.var);
+			emit(ctx, " subl	$1, %s\n", var_ref);
 			break;
 		default:
 			die("generate x86: unknown unary op: %d", exp->u.un_op.type);
@@ -309,8 +309,8 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		emit(ctx, " mov	$%d, %%eax\n", exp->u.ival);
 		break;
 	case AST_EXP_VAR:
-		stack_index = symtable_var_ref(ctx->symtable, &exp->u.var);
-		emit(ctx, " movl	-%zu(%%rbp), %%eax\n", stack_index);
+		var_ref = symtable_var_ref(ctx->symtable, &exp->u.var);
+		emit(ctx, " movl	%s, %%eax\n", var_ref);
 		break;
 	case AST_EXP_FUNC_CALL:
 		/*
@@ -356,6 +356,8 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 	default:
 		die("generate x86: unknown expression type %d", exp->type);
 	}
+out:
+	free(var_ref);
 }
 
 static void generate_func_epilogue_and_ret(struct x86_ctx *ctx)
@@ -704,6 +706,7 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 
 	ctx->cur_func = fun;
 	labelset_init(&ctx->user_labels);
+	emit(ctx, " .text\n");
 	emit(ctx, " .globl %s\n", fun->name);
 	emit(ctx, "%s:\n", fun->name);
 
@@ -742,6 +745,39 @@ static void generate_func_decl(struct ast_func_decl *fun, struct x86_ctx *ctx)
 	ctx->cur_func = NULL;
 }
 
+static void generate_global_var_decl(struct ast_var_decl *var,
+				     struct x86_ctx *ctx)
+{
+	char *var_label = symtable_put_gvar(ctx->symtable, var);
+	if (var->value) {
+		/*
+		 * The parser should have already verified this and warned the
+		 * user.
+		 */
+		assert(var->value->type == AST_EXP_CONSTANT_INT);
+		emit(ctx, " .data\n");
+		emit(ctx, " .globl %s\n", var_label);
+		emit(ctx, " .align 4\n");
+		emit(ctx, "%s:\n", var_label);
+		emit(ctx, " .long %d\n", var->value->u.ival);
+	} else {
+		/* Uninitialized global vars will be generated at the end */
+	}
+	free(var_label);
+}
+
+static void generate_uninitialized_gvar(char *var_label, void *data)
+{
+	struct x86_ctx *ctx = data;
+	emit(ctx, " .bss\n");
+	emit(ctx, " .globl %s\n", var_label);
+	emit(ctx, " .align 4\n");
+	emit(ctx, "%s:\n", var_label);
+	emit(ctx, " .zero 4\n");
+}
+#define generate_uninitialized_gvars(ctx) \
+	foreach_uninitialized_gvar(ctx->symtable, generate_uninitialized_gvar, ctx);
+
 static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 {
 	for (size_t i = 0; i < prog->items.nr; i++) {
@@ -751,12 +787,13 @@ static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 			generate_func_decl(item->u.func, ctx);
 			break;
 		case TOPLEVEL_VAR_DECL:
-			BUG("x86: sorry, I don't know how to generate global vars yet.");
+			generate_global_var_decl(item->u.var, ctx);
 			break;
 		default:
 			BUG("x86: unknown toplevel item '%s'", item->type);
 		}
 	}
+	generate_uninitialized_gvars(ctx);
 }
 
 void generate_x86_asm(struct ast_program *prog, FILE *out)

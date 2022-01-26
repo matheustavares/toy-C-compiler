@@ -120,7 +120,7 @@ Check `./cc -h` for all available options.
 - [x] Output to assembly (.s) and object file (.o).
 - [x] Multiple source files support.
 - [x] libc (using glibc through gcc on assemble - _a bit cheating_) 
-- [ ] Global variables
+- [x] Global variables
 - [ ] Storage classifiers/qualifiers (`static`, `extern`, `volatile`, `const`, etc.)
 - [ ] Pointers and arrays
 - [ ] Dereference and "address-of" operators

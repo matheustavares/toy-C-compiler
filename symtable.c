@@ -69,16 +69,21 @@ void symtable_put_lvar(struct symtable *tab, struct ast_var_decl *decl,
 	sym->scope = scope;
 }
 
-size_t symtable_var_ref(struct symtable *tab, struct var_ref *v)
+char *symtable_var_ref(struct symtable *tab, struct var_ref *v)
 {
 	struct sym_data *sdata = symtable_find(tab, v->name);
 	if (!sdata)
 		die("Undeclared variable '%s'\n%s", v->name,
 		    show_token_on_source_line(v->tok));
-	if (sdata->type != SYM_LOCAL_VAR)
+	switch (sdata->type) {
+	case SYM_LOCAL_VAR:
+		return xmkstr("-%zu(%%rbp)", sdata->u.stack_index);
+	case SYM_GLOBAL_VAR:
+		return xmkstr("_var_%s(%%rip)", v->name);
+	default:
 		die("'%s' is not a variable\n%s", v->name,
 		    show_token_on_source_line(v->tok));
-	return sdata->u.stack_index;
+	}
 }
 
 size_t symtable_bytes_in_scope(struct symtable *tab, unsigned int scope)
@@ -97,15 +102,15 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 	if (sym && sym->type == SYM_FUNC) {
 		/* All functions should be declared on scope 0. */
 		assert(!sym->scope && !scope);
-		if (sym->u.decl->body && decl->body) {
+		if (sym->u.func->body && decl->body) {
 			die("redefinition of function '%s'.\nFirst:\n%s\nThen:\n%s",
 			    decl->name, show_token_on_source_line(sym->tok),
 			    show_token_on_source_line(decl->tok));
 		}
-		if ((sym->u.decl->return_type != decl->return_type) ||
-		    (!sym->u.decl->empty_parameter_declaration &&
+		if ((sym->u.func->return_type != decl->return_type) ||
+		    (!sym->u.func->empty_parameter_declaration &&
 		     !decl->empty_parameter_declaration &&
-		     (sym->u.decl->parameters.nr != decl->parameters.nr))) {
+		     (sym->u.func->parameters.nr != decl->parameters.nr))) {
 			/*
 			 * NOTE: we can only do this direct comparison because
 			 * all our parameters are int, and thus, same-sized.
@@ -119,8 +124,8 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 		 * But if the definition has an empty parameter declaration,
 		 * the prototype must have too.
 		 */
-		if (sym->u.decl->body) {
-			if (sym->u.decl->empty_parameter_declaration &&
+		if (sym->u.func->body) {
+			if (sym->u.func->empty_parameter_declaration &&
 			    !decl->empty_parameter_declaration) {
 				die("redeclaration of function '%s' with different signature.\nFirst:\n%s\nThen:\n%s",
 				    decl->name, show_token_on_source_line(sym->tok),
@@ -139,7 +144,7 @@ void symtable_put_func(struct symtable *tab, struct ast_func_decl *decl,
 		tab->nr++;
 	}
 	sym->type = SYM_FUNC;
-	sym->u.decl = decl;
+	sym->u.func = decl;
 	sym->tok = decl->tok;
 	sym->scope = scope;
 }
@@ -155,10 +160,53 @@ struct ast_func_decl *symtable_func_call(struct symtable *tab,
 		die("cannot call '%s': it is not a function\n%s\nDefined here:\n%s",
 		    call->name, show_token_on_source_line(call->tok),
 		    show_token_on_source_line(sdata->tok));
-	if (!sdata->u.decl->empty_parameter_declaration &&
-	    (sdata->u.decl->parameters.nr != call->args.nr))
+	if (!sdata->u.func->empty_parameter_declaration &&
+	    (sdata->u.func->parameters.nr != call->args.nr))
 		die("parameter mismatch on call to '%s'\n%s\nDefined here:\n%s",
 		    call->name, show_token_on_source_line(call->tok),
 		    show_token_on_source_line(sdata->tok));
-	return sdata->u.decl;
+	return sdata->u.func;
+}
+
+char *symtable_put_gvar(struct symtable *tab, struct ast_var_decl *decl)
+{
+	struct sym_data *sym = symtable_find(tab, decl->name);
+	if (sym) {
+		if (sym->scope)
+			BUG("symtable: found symbol with non-zero scope"
+			    " while adding global var");
+
+		if (sym->type != SYM_GLOBAL_VAR || (decl->value && sym->u.gvar->value))
+			die("redefinition of symbol '%s'. First:\n%s\nThen:\n%s",
+			    decl->name, show_token_on_source_line(sym->tok),
+			    show_token_on_source_line(decl->tok));
+
+		if (sym->u.gvar->value || !decl->value)
+			goto out;
+	} else {
+		ALLOC_GROW(tab->data, tab->nr + 1, tab->alloc);
+		sym = &tab->data[tab->nr];
+		strmap_put(&tab->syms, decl->name, (void *)tab->nr);
+		tab->nr++;
+	}
+	sym->type = SYM_GLOBAL_VAR;
+	sym->u.gvar = decl;
+	sym->tok = decl->tok;
+	sym->scope = 0;
+out:
+	return xmkstr("_var_%s", decl->name);
+}
+
+void foreach_uninitialized_gvar(struct symtable *tab,
+				void (*fn)(char *, void *), void *data) {
+	for (size_t i = 0; i < tab->nr; i++) {
+		if (tab->data[i].type != SYM_GLOBAL_VAR)
+			continue;
+		struct ast_var_decl *var = tab->data[i].u.gvar;
+		if (!var->value) {
+			char *var_label = xmkstr("_var_%s", var->name);
+			fn(var_label, data);
+			free(var_label);
+		}
+	}
 }
