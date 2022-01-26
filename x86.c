@@ -669,6 +669,11 @@ static void func_body_generator(struct ast_statement *st,
 	/* First we save the arguments. */
 	for (size_t i = 0; i < parameters->nr; i++) {
 		if (i < NR_CALL_REGS) {
+			/* 
+			 * TODO: there is no need for using rax as a temporary
+			 * register if we directly use the 32-bits part of
+			 * func_call_regs[i].
+			 */
 			emit(ctx, " mov	%%%s, %%rax\n", func_call_regs[i]);
 			emit(ctx, " sub	$4, %%rsp\n");
 			emit(ctx, " movl	%%eax, (%%rsp)\n");
