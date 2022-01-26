@@ -1,12 +1,21 @@
-# A [subset-of-]C compiler
+# A toy C compiler
 
-A toy compiler I'm writing following the excellent tutorial from Nora Sandler:
+A toy compiler for a (small) subset of the C11 standard. It generates 64-bit
+x86 assembly (AT&T syntax), following the System V AMD64 ABI. `gcc` is called
+for assembling and linking (so functions from the standard C library are
+available). This is intended for fun and learning purposes, see
+limitations [here](#current-features-and-limitations) and an overview of the
+source files [here](#overview-of-the-source-files).
+
+Developed following the excellent "Writing a C Compiler"
+series by [Nora Sandler](https://github.com/nlsandler), available at:
 [https://norasandler.com/2017/11/29/Write-a-Compiler.html](https://norasandler.com/2017/11/29/Write-a-Compiler.html).
 
 ## Example
 
-The following program can be compiled with this compiler. It receives an
-integer N on stdin and prints a list of the Nth first Fibonacci numbers.
+The following C program is an example of what can be currently compiled. The
+program receives an integer N on stdin and prints the Nth first Fibonacci
+numbers on stdout.
 
 ```c
 /* We don't have includes, so we must declare the prototypes. */
@@ -26,6 +35,8 @@ int fibbonacci(int n)
 /*
  * Get an unsigned int from stdin. Return -1 on failure. The integer must
  * be followed by a newline and cannot be surrounded by spaces.
+ *
+ * Note that we only support `int` for now, so we obviously cannot use scanf.
  */
 int getint(void)
 {
@@ -83,7 +94,8 @@ int main()
 ```shell
 $ git clone --recurse-submodules # To clone the tests submodule too
 $ make
-# Produces the binary `./cc`
+# Produces the binary `./cc`.
+# Note: it requires `gcc` for assembling and linking.
 ```
 
 ## Running
@@ -105,35 +117,43 @@ Check `./cc -h` for all available options.
 
 ## Current features and limitations
 
-- [x] All (`int`) arithmetic operators (`+`, `*`, etc.)
-- [x] All relational operators (`>=`, `<`, `==`, etc.)
-- [x] All bitwise operators (`<<`, `&`, etc.)
-- [x] All logical operators (`&&`, `||`, etc.)
-- [x] Compound operators (`+=`, `*=`, etc.)
-- [x] Suffix/postfix increment and decrement (`++`, `--`)
-- [x] Ternary operator
-- [x] Inline and block comments
-- [x] Local variables (with proper scoping rules)
-- [x] `for`, `while`, and `do-while` loops
-- [x] `if` and `if-else` statements
-- [x] `int` and `void` types
-- [x] `goto` and labels
-- [x] Output to assembly (.s) and object file (.o).
-- [x] Multiple source files support.
-- [x] libc (using glibc through gcc on assemble - _a bit cheating_) 
-- [x] Global variables
-- [ ] Storage classifiers/qualifiers (`static`, `extern`, `volatile`, `const`, etc.)
-- [ ] Pointers and arrays
-- [ ] Dereference and "address-of" operators
-- [ ] Structs and unions (and its operators)
+### Implemented:
+
+- Types: signed integer only (`int`)
+- Operators (for `int`):
+	- [x] Arithmetic (`+`, `*`, etc.)
+	- [x] Relational (`>=`, `<`, `==`, etc.)
+	- [x] Bitwise (`<<`, `&`, etc.)
+	- [x] Logical (`&&`, `||`, etc.)
+	- [x] Compound assignment (`+=`, `*=`, etc.)
+	- [x] Suffix/postfix increment and decrement (`++`, `--`, etc.)
+	- [x] Ternary operator
+- Statements:
+	- [x] `for`, `while`, and `do-while` loops
+	- [x] `if` and `if-else` statements
+	- [x] `int` and `void` types
+	- [x] `goto` and labels
+	- [x] Function calls
+- Other features:
+	- [x] Inline and block comments
+	- [x] Local variables (with scoping rules)
+	- [x] Global variables
+	- [x] Multiple source files support.
+
+### Missing:
+
+- [ ] Storage classifiers and qualifiers (`static`, `extern`, `volatile`, `const`, etc.)
+- [ ] Pointers and arrays (and the `*` and `&` operators)
+- [ ] Structs and unions (and the `.` and `->` operators)
 - [ ] Preprocessing (macros, includes, ifdef, pragmas, etc.)
-- [ ] Other types: char, float, unsigned, etc.
 - [ ] Strings
+- [ ] Many other types: char, float, unsigned, etc.
 - [ ] Type casting
 - [ ] Switch-case
-- [ ] CR+LF line ending support
-- [ ] Variadic functions
-- [ ] Function parameter list without names
+- [ ] CRLF line ending support
+- [ ] Variadic functions and parameter list without names (e.g. `int func(int)`)
+- [ ] Code optimization
+- [ ] Certainly a lot more :)
 
 ## Overview of the source files 
 
