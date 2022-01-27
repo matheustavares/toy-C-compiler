@@ -68,6 +68,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_SEMICOLON: return ";";
 	case TOK_COLON: return ":";
 	case TOK_QUESTION_MARK: return "?";
+	case TOK_COMMA: return ",";
 
 	case TOK_INT_KW: return "<int> keyword";
 	case TOK_VOID_KW: return "<void> keyword";
@@ -122,7 +123,7 @@ const char *tt2str(enum token_type tt)
 	case TOK_MINUS_MINUS: return "--";
 
 	default:
-		die("Unknown token type: %d\n", tt);
+		BUG("tt2str: unknown token type: %d\n", tt);
 	}
 }
 
