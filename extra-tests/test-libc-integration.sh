@@ -36,8 +36,7 @@ int fibbonacci(int n)
 
 int getint(void)
 {
-	int val = 0;
-	int got_input = 0;
+	int val = 0, got_input = 0;
 	/* We don't have 'EOF' define, so stop on any negative number. */
 	for (int c = getchar(); c >= 0; c = getchar()) {
 		if (c == 10) // newline

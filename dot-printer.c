@@ -136,21 +136,35 @@ static size_t print_ast_expression(struct ast_expression *exp, struct label_list
 	return node;
 }
 
-static size_t print_ast_var_decl_1(struct ast_var_decl *decl, int local,
-				   struct label_list *labels)
+enum var_scope {VAR_LOCAL, VAR_GLOBAL};
+
+const char *var_scope_str(enum var_scope scope)
 {
-	size_t node = add_label(labels, xmkstr("Declare %s\\nvariable '%s'",
-				local ? "local" : "global", decl->name));
-	if (decl->value) {
-		size_t value_node = print_ast_expression(decl->value, labels);
-		print_arc_label(node, value_node, "with\\nvalue");
+	switch (scope) {
+	case VAR_LOCAL: return "local";
+	case VAR_GLOBAL: return "global";
+	default: BUG("unknown var_scope: %d", scope);
+	}
+}
+
+static size_t print_ast_var_decl_list(struct ast_var_decl_list *decl_list,
+				      enum var_scope var_scope,
+				      struct label_list *labels)
+{
+	size_t node = add_label(labels, xmkstr("Declare %s\\nvariable",
+				var_scope_str(var_scope)));
+
+	for (size_t i = 0; i < decl_list->nr; i++) {
+		struct ast_var_decl *decl = decl_list->arr[i];
+		size_t name_node = add_label(labels, xmkstr("'%s'", decl->name));
+		print_arc(node, name_node);
+		if (decl->value) {
+			size_t value_node = print_ast_expression(decl->value, labels);
+			print_arc_label(name_node, value_node, "with\\nvalue");
+		}
 	}
 	return node;
 }
-
-#define print_ast_var_decl_local(decl, labels) print_ast_var_decl_1(decl, 1, labels)
-#define print_ast_var_decl_global(decl, labels) print_ast_var_decl_1(decl, 0, labels)
-
 
 static size_t print_ast_opt_expression(struct ast_opt_expression opt_exp,
 				       struct label_list *labels)
@@ -172,7 +186,7 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		}
 		break;
 	case AST_ST_VAR_DECL:
-		node = print_ast_var_decl_local(st->u.decl, labels);
+		node = print_ast_var_decl_list(st->u.decl_list, VAR_LOCAL, labels);
 		break;
 	case AST_ST_EXPRESSION:
 		node = print_ast_opt_expression(st->u.opt_exp, labels);
@@ -210,7 +224,8 @@ static size_t print_ast_statement(struct ast_statement *st, struct label_list *l
 		break;
 	case AST_ST_FOR_DECL:
 		node = add_label(labels, xstrdup("for"));
-		next_node = print_ast_var_decl_local(st->u.for_decl.decl, labels);
+		next_node = print_ast_var_decl_list(st->u.for_decl.decl_list,
+						    VAR_LOCAL, labels);
 		print_arc_label(node, next_node, "prologue");
 		next_node = print_ast_expression(st->u.for_decl.condition, labels);
 		print_arc_label(node, next_node, "condition");
@@ -296,7 +311,7 @@ static size_t print_ast_toplevel_item(struct ast_toplevel_item *item,
 	case TOPLEVEL_FUNC_DECL:
 		return print_ast_func_decl(item->u.func, labels);
 	case TOPLEVEL_VAR_DECL:
-		return print_ast_var_decl_global(item->u.var, labels);
+		return print_ast_var_decl_list(item->u.var_list, VAR_GLOBAL, labels);
 	default:
 		BUG("unknown toplevel item '%s'", item->type);
 	}

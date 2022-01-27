@@ -12,7 +12,7 @@ static struct ast_expression *parse_exp_no_comma(struct token **tok_ptr);
 static struct ast_statement *parse_statement(struct token **tok_ptr);
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration);
-static void free_ast_expression(struct ast_expression *exp);
+static void free_ast_var_decl_list(struct ast_var_decl_list *decl_list);
 
 static char *str_join_token_types(const char *clause, va_list tt_list)
 {
@@ -390,19 +390,24 @@ static struct ast_expression *parse_exp_no_comma(struct token **tok_ptr)
 	return parse_exp_1(tok_ptr, 0, 1);
 }
 
-static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
+static struct ast_var_decl_list *parse_var_decl_list(struct token **tok_ptr)
 {
-	struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+	struct ast_var_decl_list *decl_list = xcalloc(1, sizeof(*decl_list));
 	struct token *tok = *tok_ptr;
 
 	check_and_pop(&tok, TOK_INT_KW);
-	check_and_pop(&tok, TOK_IDENTIFIER);
-	decl->name = xstrdup((char *)tok[-1].value);
-	decl->tok = &tok[-1];
-	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT))
-		decl->value = parse_exp_no_comma(&tok);
+	do {
+		struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+		check_and_pop(&tok, TOK_IDENTIFIER);
+		decl->name = xstrdup((char *)tok[-1].value);
+		decl->tok = &tok[-1];
+		if (check_and_pop_gently(&tok, TOK_ASSIGNMENT))
+			decl->value = parse_exp_no_comma(&tok);
+		ARRAY_APPEND(decl_list, decl);
+	} while (check_and_pop_gently(&tok, TOK_COMMA));
+
 	*tok_ptr = tok;
-	return decl;
+	return decl_list;
 }
 
 static struct ast_statement *parse_statement_block(struct token **tok_ptr)
@@ -440,7 +445,7 @@ static struct ast_statement *parse_for_statement(struct token **tok_ptr)
 	check_and_pop(&tok, TOK_OPEN_PAR);
 	if (tok->type == TOK_INT_KW) {
 		st->type = AST_ST_FOR_DECL;
-		st->u.for_decl.decl = parse_var_decl(&tok);
+		st->u.for_decl.decl_list = parse_var_decl_list(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
 		if (check_and_pop_gently(&tok, TOK_SEMICOLON)) {
 			st->u.for_decl.condition = gen_true_exp();
@@ -529,7 +534,7 @@ static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 
 	} else if (allow_declaration && tok->type == TOK_INT_KW) {
 		st->type = AST_ST_VAR_DECL;
-		st->u.decl = parse_var_decl(&tok);
+		st->u.decl_list = parse_var_decl_list(&tok);
 		check_and_pop(&tok, TOK_SEMICOLON);
 
 	} else if (check_and_pop_gently(&tok, TOK_WHILE_KW)) {
@@ -641,42 +646,62 @@ static struct ast_func_decl *parse_func_decl(struct token **tok_ptr)
 	return fun;
 }
 
-static struct ast_var_decl *maybe_parse_global_var(struct token **tok_ptr)
+static struct ast_var_decl_list *maybe_parse_global_var_list(struct token **tok_ptr)
 {
-	struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+	struct ast_var_decl_list *decl_list = xcalloc(1, sizeof(*decl_list));
 	struct token *tok = *tok_ptr;
+	/*
+	 * Tells at which point we consider the token sequence a variable
+	 * declaration and, thus, we no longer bail if something odd is found.
+	 */
+	int can_bail = 1;
 
-	if (!check_and_pop_gently(&tok, TOK_INT_KW) ||
-	    !check_and_pop_gently(&tok, TOK_IDENTIFIER))
-		goto error;
+	if (!check_and_pop_gently(&tok, TOK_INT_KW))
+		goto bail;
 
-	decl->name = xstrdup((char *)tok[-1].value);
-	decl->tok = &tok[-1];
-	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT)) {
-		struct token *assign_tok = &tok[-1];
-		decl->value = parse_exp(&tok);
-		if (decl->value->type != AST_EXP_CONSTANT_INT) {
-			/*
-			 * NEEDSWORK: we should also allow expressions that can
-			 * evaluate to a constant int at compile time. For
-			 * example: "2 + 2", and "~3".
-			 */
-			die("static initialization requires a constant value\n%s",
-			    show_token_on_source_line(assign_tok));
+	while (1) {
+		if (can_bail) {
+			if (!check_and_pop_gently(&tok, TOK_IDENTIFIER))
+				goto bail;
+		} else {
+			check_and_pop(&tok, TOK_IDENTIFIER);
 		}
+		struct ast_var_decl *decl = xcalloc(1, sizeof(*decl));
+		decl->name = xstrdup((char *)tok[-1].value);
+		decl->tok = &tok[-1];
+		if (check_and_pop_gently(&tok, TOK_ASSIGNMENT)) {
+			can_bail = 0;
+			struct token *assign_tok = &tok[-1];
+			decl->value = parse_exp_no_comma(&tok);
+			if (decl->value->type != AST_EXP_CONSTANT_INT) {
+				/*
+				 * NEEDSWORK: we should also allow expressions that can
+				 * evaluate to a constant int at compile time. For
+				 * example: "2 + 2", and "~3".
+				 */
+				die("static initialization requires a constant value\n%s",
+				    show_token_on_source_line(assign_tok));
+			}
+		}
+		ARRAY_APPEND(decl_list, decl);
+		if (check_and_pop_gently(&tok, TOK_COMMA))
+			can_bail = 0;
+		else
+			break;
 	}
 
-	if (!check_and_pop_gently(&tok, TOK_SEMICOLON))
-		goto error;
+	if (can_bail) {
+		if (!check_and_pop_gently(&tok, TOK_SEMICOLON))
+			goto bail;
+	} else {
+		check_and_pop(&tok, TOK_SEMICOLON);
+	}
 
 	*tok_ptr = tok;
-	return decl;
+	return decl_list;
 
-error:
-	if (decl->value)
-		free_ast_expression(decl->value);
-	free((char *)decl->name);
-	free(decl);
+bail:
+	free_ast_var_decl_list(decl_list);
 	return NULL;
 }
 
@@ -687,10 +712,10 @@ struct ast_program *parse_program(struct token *toks)
 
 	while (!end_token(toks)) {
 		struct ast_toplevel_item *item = xmalloc(sizeof(*item));
-		struct ast_var_decl *var = maybe_parse_global_var(&toks);
-		if (var) {
+		struct ast_var_decl_list *var_list = maybe_parse_global_var_list(&toks);
+		if (var_list) {
 			item->type = TOPLEVEL_VAR_DECL;
-			item->u.var = var;
+			item->u.var_list = var_list;
 		} else {
 			item->type = TOPLEVEL_FUNC_DECL;
 			item->u.func = parse_func_decl(&toks);
@@ -746,6 +771,15 @@ static void free_ast_var_decl(struct ast_var_decl *decl)
 	free(decl);
 }
 
+static void free_ast_var_decl_list(struct ast_var_decl_list *decl_list)
+{
+	for (size_t i = 0; i < decl_list->nr; i++) {
+		free_ast_var_decl(decl_list->arr[i]);
+	}
+	FREE_ARRAY(decl_list);
+	free(decl_list);
+}
+
 static void free_ast_opt_expression(struct ast_opt_expression opt_exp)
 {
 	if (opt_exp.exp)
@@ -759,7 +793,7 @@ static void free_ast_statement(struct ast_statement *st)
 		free_ast_opt_expression(st->u._return.opt_exp);
 		break;
 	case AST_ST_VAR_DECL:
-		free_ast_var_decl(st->u.decl);
+		free_ast_var_decl_list(st->u.decl_list);
 		break;
 	case AST_ST_EXPRESSION:
 		free_ast_opt_expression(st->u.opt_exp);
@@ -782,7 +816,7 @@ static void free_ast_statement(struct ast_statement *st)
 		free_ast_statement(st->u._for.body);
 		break;
 	case AST_ST_FOR_DECL:
-		free_ast_var_decl(st->u.for_decl.decl);
+		free_ast_var_decl_list(st->u.for_decl.decl_list);
 		free_ast_expression(st->u.for_decl.condition);
 		free_ast_opt_expression(st->u.for_decl.epilogue);
 		free_ast_statement(st->u.for_decl.body);
@@ -826,7 +860,7 @@ static void free_ast_toplevel_item(struct ast_toplevel_item *item)
 		free_ast_func_decl(item->u.func);
 		break;
 	case TOPLEVEL_VAR_DECL:
-		free_ast_var_decl(item->u.var);
+		free_ast_var_decl_list(item->u.var_list);
 		break;
 	default:
 		BUG("unknown toplevel item '%s'", item->type);

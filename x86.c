@@ -558,6 +558,13 @@ static void generate_var_decl(struct ast_var_decl *decl, struct x86_ctx *ctx)
 	emit(ctx, " movl	%%eax, -%zu(%%rbp)\n", var_stack_index);
 }
 
+static void generate_var_decl_list(struct ast_var_decl_list *decl_list,
+				   struct x86_ctx *ctx)
+{
+	for (size_t i = 0; i < decl_list->nr; i++)
+		generate_var_decl(decl_list->arr[i], ctx);
+}
+
 static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
 			       void *unused)
 {
@@ -570,7 +577,7 @@ static void for_decl_generator(struct ast_statement *st, struct x86_ctx *ctx,
 	stack_push(&ctx->continue_labels, label_epilogue);
 
 	assert(st->type == AST_ST_FOR_DECL);
-	generate_var_decl(st->u.for_decl.decl, ctx);
+	generate_var_decl_list(st->u.for_decl.decl_list, ctx);
 	emit(ctx, "%s:\n", label_condition);
 	generate_expression(st->u._for.condition, ctx, 1);
 	emit(ctx, " cmp	$0, %%eax\n");
@@ -611,7 +618,7 @@ static void generate_statement(struct ast_statement *st, struct x86_ctx *ctx)
 		generate_func_epilogue_and_ret(ctx);
 		break;
 	case AST_ST_VAR_DECL:
-		generate_var_decl(st->u.decl, ctx);
+		generate_var_decl_list(st->u.decl_list, ctx);
 		break;
 	case AST_ST_EXPRESSION:
 		generate_opt_expression(st->u.opt_exp, ctx, 0);
@@ -775,6 +782,13 @@ static void generate_global_var_decl(struct ast_var_decl *var,
 	free(var_label);
 }
 
+static void generate_global_var_decl_list(struct ast_var_decl_list *decl_list,
+					  struct x86_ctx *ctx)
+{
+	for (size_t i = 0; i < decl_list->nr; i++)
+		generate_global_var_decl(decl_list->arr[i], ctx);
+}
+
 static void generate_uninitialized_gvar(char *var_label, void *data)
 {
 	struct x86_ctx *ctx = data;
@@ -796,7 +810,7 @@ static void generate_prog(struct ast_program *prog, struct x86_ctx *ctx)
 			generate_func_decl(item->u.func, ctx);
 			break;
 		case TOPLEVEL_VAR_DECL:
-			generate_global_var_decl(item->u.var, ctx);
+			generate_global_var_decl_list(item->u.var_list, ctx);
 			break;
 		default:
 			BUG("x86: unknown toplevel item '%s'", item->type);

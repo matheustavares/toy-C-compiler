@@ -124,6 +124,8 @@ struct ast_var_decl {
 	struct ast_expression *value; /* optional */
 };
 
+NAMED_ARRAY(struct ast_var_decl *, ast_var_decl_list);
+
 struct ast_statement {
 	enum {
 		AST_ST_RETURN,
@@ -152,7 +154,7 @@ struct ast_statement {
 		} _return;
 
 		struct ast_opt_expression opt_exp;
-		struct ast_var_decl *decl;
+		struct ast_var_decl_list *decl_list;
 		struct if_else {
 			struct ast_expression *condition;
 			struct ast_statement *if_st, *else_st; /* else is optional */
@@ -171,7 +173,7 @@ struct ast_statement {
 		} _for;
 
 		struct {
-			struct ast_var_decl *decl;
+			struct ast_var_decl_list *decl_list;
 			struct ast_expression *condition; /* must default to true when empty */
 			struct ast_opt_expression epilogue;
 			struct ast_statement *body;
@@ -227,7 +229,7 @@ struct ast_toplevel_item {
 	} type;
 
 	union {
-		struct ast_var_decl *var;
+		struct ast_var_decl_list *var_list;
 		struct ast_func_decl *func;
 	} u;
 };
