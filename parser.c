@@ -8,6 +8,7 @@
 *******************************************************************************/
 
 static struct ast_expression *parse_exp(struct token **tok_ptr);
+static struct ast_expression *parse_exp_no_comma(struct token **tok_ptr);
 static struct ast_statement *parse_statement(struct token **tok_ptr);
 static struct ast_statement *parse_statement_1(struct token **tok_ptr,
 					       int allow_declaration);
@@ -108,7 +109,7 @@ static struct ast_expression *parse_exp_atom(struct token **tok_ptr)
 		while (tok->type != TOK_CLOSE_PAR) {
 			if (!is_first_parameter)
 				check_and_pop(&tok, TOK_COMMA);
-			ARRAY_APPEND(&exp->u.call.args, parse_exp(&tok));
+			ARRAY_APPEND(&exp->u.call.args, parse_exp_no_comma(&tok));
 			is_first_parameter = 0;
 		}
 		check_and_pop(&tok, TOK_CLOSE_PAR);
@@ -166,6 +167,7 @@ struct bin_op_info {
  * invert the number sequence, so the lowest value has the highest precedence.
  */
 static struct bin_op_info bin_op_info[] = {
+	[EXP_OP_COMMA] =                { .assoc=ASSOC_LEFT,  .precedence=1 },
 	[EXP_OP_ASSIGNMENT] =           { .assoc=ASSOC_RIGHT, .precedence=2 },
 	[EXP_OP_LOGIC_OR] =             { .assoc=ASSOC_LEFT,  .precedence=4 },
 	[EXP_OP_LOGIC_AND] =            { .assoc=ASSOC_LEFT,  .precedence=5 },
@@ -209,6 +211,7 @@ static int is_bin_op_tok_1(enum token_type type, enum bin_op_type *ret)
 	case TOK_BITWISE_XOR:         *ret = EXP_OP_BITWISE_XOR; return 1;
 	case TOK_BITWISE_LEFT_SHIFT:  *ret = EXP_OP_BITWISE_LEFT_SHIFT; return 1;
 	case TOK_BITWISE_RIGHT_SHIFT: *ret = EXP_OP_BITWISE_RIGHT_SHIFT; return 1;
+	case TOK_COMMA:               *ret = EXP_OP_COMMA; return 1;
 	case TOK_ASSIGNMENT:
 	case TOK_PLUS_ASSIGNMENT:
 	case TOK_MINUS_ASSIGNMENT:
@@ -303,7 +306,8 @@ struct ast_expression *ast_expression_var_dup(struct ast_expression *vexp)
  * Parse expression using precedence climbing.
  * See: https://eli.thegreenplace.net/2012/08/02/parsing-expressions-by-precedence-climbing.
  */
-static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
+static struct ast_expression *parse_exp_1(struct token **tok_ptr,
+					  int allow_comma, int min_prec)
 {
 	struct token *op_tok, *tok = *tok_ptr;
 	struct ast_expression *exp = parse_exp_atom(&tok);
@@ -322,9 +326,10 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 			exp = xmalloc(sizeof(*exp));
 			exp->type = AST_EXP_TERNARY;
 			exp->u.ternary.condition = condition;
-			exp->u.ternary.if_exp = parse_exp(&tok);
+			exp->u.ternary.if_exp = allow_comma ? parse_exp(&tok) :
+						parse_exp_no_comma(&tok);
 			check_and_pop(&tok, TOK_COLON);
-			exp->u.ternary.else_exp = parse_exp_1(&tok,
+			exp->u.ternary.else_exp = parse_exp_1(&tok, allow_comma,
 					ternary_assoc == ASSOC_LEFT ?
 					ternary_prec + 1 : ternary_prec);
 			continue;
@@ -333,6 +338,9 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 		enum bin_op_type compound_op;
 		enum bin_op_type bin_op_type = tt2bin_op_type(tok->type);
 		int prec = bin_op_precedence(bin_op_type);
+
+		if (!allow_comma && bin_op_type == EXP_OP_COMMA)
+			break;
 
 		if (bin_op_type == EXP_OP_ASSIGNMENT && exp->type != AST_EXP_VAR)
 			die("parser: assignment operator requires lvalue on left side.\n%s",
@@ -347,7 +355,8 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 
 		struct ast_expression *lexp = exp;
 		struct ast_expression *rexp =
-			parse_exp_1(&tok, assoc == ASSOC_LEFT ? prec + 1 : prec);
+			parse_exp_1(&tok, allow_comma,
+				    assoc == ASSOC_LEFT ? prec + 1 : prec);
 
 		exp = xmalloc(sizeof(*exp));
 		exp->type = AST_EXP_BINARY_OP;
@@ -373,7 +382,12 @@ static struct ast_expression *parse_exp_1(struct token **tok_ptr, int min_prec)
 
 static struct ast_expression *parse_exp(struct token **tok_ptr)
 {
-	return parse_exp_1(tok_ptr, 1);
+	return parse_exp_1(tok_ptr, 1, 1);
+}
+
+static struct ast_expression *parse_exp_no_comma(struct token **tok_ptr)
+{
+	return parse_exp_1(tok_ptr, 0, 1);
 }
 
 static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
@@ -386,8 +400,7 @@ static struct ast_var_decl *parse_var_decl(struct token **tok_ptr)
 	decl->name = xstrdup((char *)tok[-1].value);
 	decl->tok = &tok[-1];
 	if (check_and_pop_gently(&tok, TOK_ASSIGNMENT))
-		decl->value = parse_exp(&tok);
-
+		decl->value = parse_exp_no_comma(&tok);
 	*tok_ptr = tok;
 	return decl;
 }

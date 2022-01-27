@@ -75,6 +75,8 @@ struct ast_expression {
 				EXP_OP_BITWISE_LEFT_SHIFT,
 				EXP_OP_BITWISE_RIGHT_SHIFT,
 
+				EXP_OP_COMMA,
+
 				/*
 				 * Note: although this is listed as a binary
 				 * operator (and it indeed inceeds upon two

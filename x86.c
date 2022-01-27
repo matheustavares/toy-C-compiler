@@ -142,7 +142,11 @@ static void generate_expression(struct ast_expression *exp, struct x86_ctx *ctx,
 		 * We check these first because they have their own semantics
 		 * regarding the calculation (or not) of the expresions.
 		 */
-		if (bin_op_type == EXP_OP_LOGIC_AND) {
+		if (bin_op_type == EXP_OP_COMMA) {
+			generate_expression(exp->u.bin_op.lexp, ctx, 0);
+			generate_expression(exp->u.bin_op.rexp, ctx, 1);
+			goto out;
+		} else if (bin_op_type == EXP_OP_LOGIC_AND) {
 			generate_logic_and(exp, ctx);
 			goto out;
 		} else if (bin_op_type == EXP_OP_LOGIC_OR) {

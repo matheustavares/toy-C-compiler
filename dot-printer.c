@@ -74,6 +74,8 @@ static const char *bin_op_as_str(enum bin_op_type type)
 
 	case EXP_OP_ASSIGNMENT: return "Assignment";
 
+	case EXP_OP_COMMA: return ",";
+
 	default: die("BUG: unknown bin_op type %d", type);
 	}
 }
